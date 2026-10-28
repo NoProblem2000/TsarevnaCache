@@ -20,8 +20,11 @@
   },
   "dependencies": {
     "@codemirror/lang-json": "6.0.1",
+    "@codemirror/language": "6.13.1",
+    "@codemirror/view": "6.43.15",
     "@fontsource/inter": "5.1.0",
     "@fontsource/jetbrains-mono": "5.1.1",
+    "@lezer/highlight": "1.2.5",
     "@tanstack/react-query": "5.59.20",
     "@uiw/react-codemirror": "4.23.6",
     "i18next": "23.16.4",
@@ -33,8 +36,8 @@
     "recharts": "2.13.3"
   },
   "devDependencies": {
-    "@types/react": "18.3.12",
     "@types/node": "20.17.6",
+    "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
     "@vitejs/plugin-react": "4.3.3",
     "autoprefixer": "10.4.20",

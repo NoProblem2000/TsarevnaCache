@@ -35,6 +35,7 @@ public final class EmbeddedCluster {
         config.setClassLoader(hiddenClassLoader);
         config.setProperty("hazelcast.phone.home.enabled", "false");
         config.setProperty("hazelcast.logging.type", "slf4j");
+        config.getMetricsConfig().setCollectionFrequencySeconds(1);
 
         NetworkConfig network = config.getNetworkConfig();
         network.setPort(15701).setPortAutoIncrement(true).setPortCount(100);

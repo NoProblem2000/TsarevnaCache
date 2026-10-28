@@ -105,6 +105,22 @@ admin:
       - com.hazelcast.
       - io.github.noproblem2000.tsarevnacache.
 
+  # ---------------------------------------------------------------------------
+  # Cluster / data explorer limits.
+  # ---------------------------------------------------------------------------
+  explorer:
+    operation-timeout: 15s
+    # Member metrics (map statistics, heap) are cached between UI refreshes.
+    metrics-cache-ttl: 3s
+    max-page-size: 200
+    # Partitions scanned in parallel while filling an unfiltered IMap page.
+    scan-parallelism: 32
+    # Items shown for queues, sets, lists, multimaps and replicated maps.
+    max-preview-items: 50
+    # Queues/sets/multimaps/replicated maps larger than this are not fetched
+    # (clients can only read them as a whole).
+    max-fetch-items: 10000
+
 logging:
   level:
     root: INFO

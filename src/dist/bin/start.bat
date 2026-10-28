@@ -48,16 +48,14 @@ if not exist "%APP_JAR%" (
     exit /b 1
 )
 
-rem G1, heap sized relative to the host memory, fail fast on OOM.
-set "DEFAULT_JVM_OPTS=-XX:+UseG1GC -XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError -Dfile.encoding=UTF-8"
+rem Same JVM options as HazelcastInspector.exe and start.sh; JAVA_OPTS (e.g. -Xmx2g) overrides them.
+set "DEFAULT_JVM_OPTS=-Xms256m -Xmx1024m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError -Dfile.encoding=UTF-8"
 
 rem Module access recommended by Hazelcast for Java 17+ (avoids reflective access warnings).
 set "HAZELCAST_JVM_OPTS=--add-modules java.se --add-exports java.base/jdk.internal.ref=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.management/sun.management=ALL-UNNAMED --add-opens jdk.management/com.sun.management.internal=ALL-UNNAMED"
 
-rem Spring expects forward slashes in file: locations.
-set "CONFIG_DIR=%APP_HOME:\=/%/config/"
-
+rem The working directory is the distribution root, so lib/ and ./config/ resolve against it.
 cd /d "%APP_HOME%"
 
-"%JAVA_CMD%" %DEFAULT_JVM_OPTS% %HAZELCAST_JVM_OPTS% %JAVA_OPTS% "-Dloader.path=%APP_HOME%\lib" -jar "%APP_JAR%" "--spring.config.additional-location=optional:file:%CONFIG_DIR%" %*
+"%JAVA_CMD%" %DEFAULT_JVM_OPTS% %HAZELCAST_JVM_OPTS% %JAVA_OPTS% -Dloader.path=lib/ -jar "%APP_JAR%" --spring.config.location=optional:classpath:/,optional:file:./config/ %*
 exit /b %ERRORLEVEL%

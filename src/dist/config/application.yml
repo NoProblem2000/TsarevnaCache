@@ -2,7 +2,8 @@
 #  Hazelcast Inspector (TsarevnaCache) - external configuration
 #
 #  This file is loaded on top of the defaults built into hazelcast-inspector.jar
-#  (bin/start.sh / bin/start.bat pass it via --spring.config.additional-location).
+#  (HazelcastInspector.exe, bin/start.sh and bin/start.bat start the service in the
+#  distribution root with --spring.config.location=optional:classpath:/,optional:file:./config/).
 #  Only the settings below are usually changed; every other property of the
 #  built-in application.yml can be overridden here as well.
 #

@@ -5,6 +5,8 @@ server:
 
 ```
 hazelcast-inspector-<version>/
+├── HazelcastInspector.exe      Windows launcher (Launch4j, starts java.exe without cmd.exe)
+├── HazelcastInspector.l4j.ini  extra JVM options for the .exe
 ├── hazelcast-inspector.jar     backend + web UI (executable Spring Boot jar)
 ├── config/application.yml      external configuration: cluster, credentials, serializers
 ├── lib/README-LIBS.txt         drop custom DTO jars here (added via -Dloader.path)
@@ -14,7 +16,9 @@ hazelcast-inspector-<version>/
 └── README.md
 ```
 
-Archives: `target/hazelcast-inspector-<version>-release.zip` and `.tar.gz`.
+Archives: `target/hazelcast-inspector-<version>-release.zip` and `.tar.gz`. CI additionally compiles
+the native C launcher (`src/launcher/build-native.sh`, mingw-w64) and publishes it as
+`HazelcastInspector-native.exe` next to the archives.
 
 ## Automated release (recommended)
 
@@ -34,8 +38,8 @@ Pushing the tag triggers CI, which builds the archive again and publishes it:
 
 | CI | Release branch push | Tag `v*` push |
 |---|---|---|
-| GitHub Actions (`.github/workflows/release.yml`) | build + test, archives attached to the workflow run | GitHub Release with `.zip` and `.tar.gz` |
-| GitLab CI (`.gitlab-ci.yml`) | build + test, archives as job artifacts (30 days) | archives in the Generic Package Registry + GitLab Release |
+| GitHub Actions (`.github/workflows/release.yml`) | build + test, archives attached to the workflow run | GitHub Release with `.zip`, `.tar.gz` and `HazelcastInspector-native.exe` |
+| GitLab CI (`.gitlab-ci.yml`) | build + test, archives as job artifacts (30 days) | the same files in the Generic Package Registry + GitLab Release |
 
 Both pipelines fail when the tag does not match the Maven version and verify that the archive
 contains the jar, the UI bundle, the configuration and the start scripts. Tags with a suffix

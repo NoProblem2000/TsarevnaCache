@@ -69,12 +69,18 @@ jobs:
       - name: Build, test and package (-Prelease)
         run: ./mvnw -B -ntp clean verify -Prelease
 
+      - name: Build native launcher (mingw-w64)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64 > /dev/null
+          bash src/launcher/build-native.sh "${{ steps.version.outputs.version }}" target/HazelcastInspector-native.exe
+
       - name: Verify the distribution
         run: |
           set -eu
           ZIP=$(ls target/hazelcast-inspector-*-release.zip)
           unzip -l "$ZIP"
-          for entry in hazelcast-inspector.jar config/application.yml lib/README-LIBS.txt bin/start.sh bin/start.bat LICENSE README.md; do
+          for entry in HazelcastInspector.exe HazelcastInspector.l4j.ini hazelcast-inspector.jar config/application.yml lib/README-LIBS.txt bin/start.sh bin/start.bat LICENSE README.md; do
             unzip -l "$ZIP" | grep -q "/$entry\$" || { echo "::error::$entry missing in $ZIP"; exit 1; }
           done
           unzip -p "$ZIP" "*/hazelcast-inspector.jar" > /tmp/app.jar
@@ -87,6 +93,7 @@ jobs:
           path: |
             target/hazelcast-inspector-*-release.zip
             target/hazelcast-inspector-*-release.tar.gz
+            target/HazelcastInspector-native.exe
           if-no-files-found: error
           retention-days: 30
 
@@ -115,11 +122,17 @@ jobs:
           files: |
             dist/hazelcast-inspector-*-release.zip
             dist/hazelcast-inspector-*-release.tar.gz
+            dist/HazelcastInspector-native.exe
           body: |
             Standalone distribution of Hazelcast Inspector (TsarevnaCache) — backend and web UI in one jar.
 
             **Run:** unpack the archive, adjust `config/application.yml` (cluster members, admin password),
-            then start `bin/start.sh` (Linux/macOS) or `bin\start.bat` (Windows). Requires Java 17+.
+            then start `HazelcastInspector.exe` (Windows, no cmd.exe needed), `bin\start.bat` (Windows)
+            or `bin/start.sh` (Linux/macOS). Requires Java 17+ (or a JRE unpacked into `jre/`).
             Put jars with your DTO classes into `lib/`.
+
+            `HazelcastInspector-native.exe` is an optional drop-in replacement for `HazelcastInspector.exe`
+            (17 KB, plain Win32 C launcher that also stops Java when the launcher is killed): rename it to
+            `HazelcastInspector.exe` and put it into the unpacked folder.
 
             Licensed under the PolyForm Noncommercial License 1.0.0 — commercial use requires permission.

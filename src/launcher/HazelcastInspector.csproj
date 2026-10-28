@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    C# variant of the native launcher (alternative to launcher.c).
+
+    Framework-dependent single file (needs the .NET 8 runtime on the target machine):
+      dotnet publish src/launcher/HazelcastInspector.csproj -c Release -r win-x64 -o target/launcher-cs
+
+    Self-contained single file (no .NET runtime needed, ~70 MB):
+      dotnet publish src/launcher/HazelcastInspector.csproj -c Release -r win-x64 -p:SelfContained=true -o target/launcher-cs
+
+    Native AOT (small native exe, build on Windows with the C++ build tools installed):
+      dotnet publish src/launcher/HazelcastInspector.csproj -c Release -r win-x64 -p:PublishAot=true -o target/launcher-cs
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>HazelcastInspector</AssemblyName>
+    <RootNamespace>HazelcastInspector</RootNamespace>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <Product>Hazelcast Inspector (TsarevnaCache)</Product>
+    <Description>Hazelcast Inspector launcher</Description>
+    <Company>NoProblem2000</Company>
+    <Copyright>Copyright (c) 2026 NoProblem2000. PolyForm Noncommercial License 1.0.0</Copyright>
+  </PropertyGroup>
+
+</Project>

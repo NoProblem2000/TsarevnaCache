@@ -3,6 +3,8 @@
     Standalone distribution of the admin service (built with: mvn clean package -Prelease).
 
     hazelcast-inspector-<version>/
+    ├── HazelcastInspector.exe      Windows launcher, starts java.exe directly (no cmd.exe)
+    ├── HazelcastInspector.l4j.ini  extra JVM options for the .exe
     ├── hazelcast-inspector.jar     executable Spring Boot jar (backend + UI)
     ├── config/application.yml      external configuration (cluster, credentials, ...)
     ├── lib/README-LIBS.txt         drop custom DTO / serializer jars here
@@ -26,6 +28,17 @@
             <source>${project.build.directory}/${project.build.finalName}.jar</source>
             <destName>${distribution.name}.jar</destName>
             <outputDirectory>/</outputDirectory>
+            <fileMode>0644</fileMode>
+        </file>
+        <file>
+            <source>${project.build.directory}/HazelcastInspector.exe</source>
+            <outputDirectory>/</outputDirectory>
+            <fileMode>0755</fileMode>
+        </file>
+        <file>
+            <source>src/dist/HazelcastInspector.l4j.ini</source>
+            <outputDirectory>/</outputDirectory>
+            <lineEnding>dos</lineEnding>
             <fileMode>0644</fileMode>
         </file>
         <file>

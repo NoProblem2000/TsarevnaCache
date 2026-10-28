@@ -40,8 +40,8 @@ if [ ! -f "$APP_JAR" ]; then
     exit 1
 fi
 
-# G1, heap sized relative to the container/host memory, fail fast on OOM.
-DEFAULT_JVM_OPTS="-XX:+UseG1GC -XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError -Dfile.encoding=UTF-8"
+# Same JVM options as HazelcastInspector.exe and start.bat; JAVA_OPTS (e.g. -Xmx2g) overrides them.
+DEFAULT_JVM_OPTS="-Xms256m -Xmx1024m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError -Dfile.encoding=UTF-8"
 
 # Module access recommended by Hazelcast for Java 17+ (avoids reflective access warnings).
 HAZELCAST_JVM_OPTS="--add-modules java.se \
@@ -54,8 +54,9 @@ HAZELCAST_JVM_OPTS="--add-modules java.se \
 cd "$APP_HOME"
 
 # shellcheck disable=SC2086 # option lists are intentionally word-split
+# The working directory is the distribution root, so lib/ and ./config/ resolve against it.
 exec "$JAVA_CMD" $DEFAULT_JVM_OPTS $HAZELCAST_JVM_OPTS ${JAVA_OPTS:-} \
-    "-Dloader.path=$APP_HOME/lib" \
+    -Dloader.path=lib/ \
     -jar "$APP_JAR" \
-    "--spring.config.additional-location=optional:file:$APP_HOME/config/" \
+    --spring.config.location=optional:classpath:/,optional:file:./config/ \
     "$@"

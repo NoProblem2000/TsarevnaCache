@@ -71,6 +71,8 @@
 
         <!-- Name of the standalone distribution (archive, folder and jar inside it) -->
         <distribution.name>hazelcast-inspector</distribution.name>
+        <!-- Windows launcher (HazelcastInspector.exe) generated in the release profile -->
+        <launch4j-maven-plugin.version>2.7.0</launch4j-maven-plugin.version>
     </properties>
 
     <dependencies>
@@ -289,6 +291,81 @@
                                             <version>[17,)</version>
                                         </requireJavaVersion>
                                     </rules>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <!-- parsedVersion.* : numeric x.y.z for the Windows file version -->
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>parse-version</id>
+                                <goals>
+                                    <goal>parse-version</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <!--
+                            HazelcastInspector.exe: console launcher that starts java.exe directly (no
+                            cmd.exe). dontWrapJar keeps hazelcast-inspector.jar next to the exe, so the
+                            PropertiesLauncher, lib/ and config/ work exactly as with the scripts.
+                            Java lookup: jre\ next to the exe, then JAVA_HOME, then PATH.
+                            Extra JVM options: HazelcastInspector.l4j.ini next to the exe.
+                        -->
+                        <groupId>com.akathist.maven.plugins.launch4j</groupId>
+                        <artifactId>launch4j-maven-plugin</artifactId>
+                        <version>${launch4j-maven-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>windows-launcher</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>launch4j</goal>
+                                </goals>
+                                <configuration>
+                                    <headerType>console</headerType>
+                                    <outfile>${project.build.directory}/HazelcastInspector.exe</outfile>
+                                    <jar>${distribution.name}.jar</jar>
+                                    <dontWrapJar>true</dontWrapJar>
+                                    <errTitle>Hazelcast Inspector</errTitle>
+                                    <chdir>.</chdir>
+                                    <cmdLine>--spring.config.location=optional:classpath:/,optional:file:./config/</cmdLine>
+                                    <jre>
+                                        <path>jre;%JAVA_HOME%;%PATH%</path>
+                                        <requiresJdk>false</requiresJdk>
+                                        <requires64Bit>true</requires64Bit>
+                                        <minVersion>17</minVersion>
+                                        <initialHeapSize>256</initialHeapSize>
+                                        <maxHeapSize>1024</maxHeapSize>
+                                        <opts>
+                                            <opt>-XX:+UseG1GC</opt>
+                                            <opt>-XX:+ExitOnOutOfMemoryError</opt>
+                                            <opt>-Dfile.encoding=UTF-8</opt>
+                                            <opt>--add-modules java.se</opt>
+                                            <opt>--add-exports java.base/jdk.internal.ref=ALL-UNNAMED</opt>
+                                            <opt>--add-opens java.base/java.lang=ALL-UNNAMED</opt>
+                                            <opt>--add-opens java.base/sun.nio.ch=ALL-UNNAMED</opt>
+                                            <opt>--add-opens java.management/sun.management=ALL-UNNAMED</opt>
+                                            <opt>--add-opens jdk.management/com.sun.management.internal=ALL-UNNAMED</opt>
+                                            <opt>-Dloader.path=lib/</opt>
+                                        </opts>
+                                    </jre>
+                                    <versionInfo>
+                                        <fileVersion>${parsedVersion.majorVersion}.${parsedVersion.minorVersion}.${parsedVersion.incrementalVersion}.0</fileVersion>
+                                        <txtFileVersion>${project.version}</txtFileVersion>
+                                        <productVersion>${parsedVersion.majorVersion}.${parsedVersion.minorVersion}.${parsedVersion.incrementalVersion}.0</productVersion>
+                                        <txtProductVersion>${project.version}</txtProductVersion>
+                                        <fileDescription>Hazelcast Inspector launcher</fileDescription>
+                                        <productName>Hazelcast Inspector (TsarevnaCache)</productName>
+                                        <companyName>NoProblem2000</companyName>
+                                        <copyright>Copyright (c) 2026 NoProblem2000. PolyForm Noncommercial License 1.0.0</copyright>
+                                        <internalName>HazelcastInspector</internalName>
+                                        <originalFilename>HazelcastInspector.exe</originalFilename>
+                                    </versionInfo>
                                 </configuration>
                             </execution>
                         </executions>

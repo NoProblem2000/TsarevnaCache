@@ -33,7 +33,7 @@ build-distribution:
       - .m2/repository
       - frontend/node
   before_script:
-    - apt-get update -qq && apt-get install -y -qq unzip > /dev/null
+    - apt-get update -qq && apt-get install -y -qq unzip gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64 > /dev/null
   script:
     - VERSION=$(mvn $MAVEN_CLI_OPTS -q help:evaluate -Dexpression=project.version -DforceStdout)
     - echo "Project version $VERSION"
@@ -42,9 +42,10 @@ build-distribution:
         echo "Tag $CI_COMMIT_TAG does not match project version $VERSION"; exit 1
       fi
     - mvn $MAVEN_CLI_OPTS clean verify -Prelease
+    - bash src/launcher/build-native.sh "$VERSION" target/HazelcastInspector-native.exe
     - ZIP="target/$DIST_NAME-$VERSION-release.zip"
     - |
-      for entry in $DIST_NAME.jar config/application.yml lib/README-LIBS.txt bin/start.sh bin/start.bat LICENSE README.md; do
+      for entry in HazelcastInspector.exe HazelcastInspector.l4j.ini $DIST_NAME.jar config/application.yml lib/README-LIBS.txt bin/start.sh bin/start.bat LICENSE README.md; do
         unzip -l "$ZIP" | grep -q "/$entry\$" || { echo "$entry missing in $ZIP"; exit 1; }
       done
     - unzip -p "$ZIP" "*/$DIST_NAME.jar" > /tmp/app.jar
@@ -55,6 +56,7 @@ build-distribution:
     paths:
       - target/$DIST_NAME-*-release.zip
       - target/$DIST_NAME-*-release.tar.gz
+      - target/HazelcastInspector-native.exe
     reports:
       dotenv: build.env
       junit:
@@ -72,7 +74,7 @@ upload-packages:
   script:
     - PACKAGE_URL="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${DIST_NAME}/${VERSION}"
     - |
-      for file in target/$DIST_NAME-$VERSION-release.zip target/$DIST_NAME-$VERSION-release.tar.gz; do
+      for file in target/$DIST_NAME-$VERSION-release.zip target/$DIST_NAME-$VERSION-release.tar.gz target/HazelcastInspector-native.exe; do
         curl --fail --show-error --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file "$file" "${PACKAGE_URL}/$(basename "$file")"
       done
 
@@ -94,8 +96,12 @@ create-release:
       Standalone distribution of Hazelcast Inspector (TsarevnaCache) — backend and web UI in one jar.
 
       Unpack the archive, adjust `config/application.yml` (cluster members, admin password) and start
-      `bin/start.sh` (Linux/macOS) or `bin\start.bat` (Windows). Requires Java 17+. Put jars with your
-      DTO classes into `lib/`.
+      `HazelcastInspector.exe` (Windows, no cmd.exe needed), `bin\start.bat` (Windows) or
+      `bin/start.sh` (Linux/macOS). Requires Java 17+ (or a JRE unpacked into `jre/`). Put jars with
+      your DTO classes into `lib/`.
+
+      `HazelcastInspector-native.exe` is an optional drop-in replacement for `HazelcastInspector.exe`
+      (plain Win32 C launcher that also stops Java when the launcher is killed).
 
       Licensed under the PolyForm Noncommercial License 1.0.0 — commercial use requires permission.
     assets:
@@ -105,4 +111,7 @@ create-release:
           link_type: package
         - name: "$DIST_NAME-$VERSION-release.tar.gz"
           url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${DIST_NAME}/${VERSION}/${DIST_NAME}-${VERSION}-release.tar.gz"
+          link_type: package
+        - name: "HazelcastInspector-native.exe"
+          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${DIST_NAME}/${VERSION}/HazelcastInspector-native.exe"
           link_type: package

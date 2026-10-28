@@ -1,0 +1,39 @@
+// Version information of the native launcher (shown in Explorer > Properties > Details).
+// Pass the version with: windres -DLAUNCHER_VERSION=1,0,1,0 -DLAUNCHER_VERSION_STR=\"1.0.1\" ...
+#include <winver.h>
+
+#ifndef LAUNCHER_VERSION
+#define LAUNCHER_VERSION 0,0,0,0
+#endif
+#ifndef LAUNCHER_VERSION_STR
+#define LAUNCHER_VERSION_STR "0.0.0"
+#endif
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     LAUNCHER_VERSION
+PRODUCTVERSION  LAUNCHER_VERSION
+FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+FILEFLAGS       0
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_APP
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName",      "NoProblem2000"
+            VALUE "FileDescription",  "Hazelcast Inspector launcher"
+            VALUE "FileVersion",      LAUNCHER_VERSION_STR
+            VALUE "InternalName",     "HazelcastInspector"
+            VALUE "LegalCopyright",   "Copyright (c) 2026 NoProblem2000. PolyForm Noncommercial License 1.0.0"
+            VALUE "OriginalFilename", "HazelcastInspector.exe"
+            VALUE "ProductName",      "Hazelcast Inspector (TsarevnaCache)"
+            VALUE "ProductVersion",   LAUNCHER_VERSION_STR
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

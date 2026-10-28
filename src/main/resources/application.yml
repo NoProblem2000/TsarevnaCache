@@ -88,6 +88,23 @@ admin:
       #  - type-class: com.example.Money
       #    serializer-class: com.example.MoneySerializer
 
+  # ---------------------------------------------------------------------------
+  # Value inspector (JSON rendering of keys/values and typed writes).
+  # ---------------------------------------------------------------------------
+  inspector:
+    # Length of the single-line value preview shown in tables.
+    preview-length: 160
+    # Packages that may not be used as CLASS targets when writing values.
+    denied-class-prefixes:
+      - java.
+      - javax.
+      - jdk.
+      - sun.
+      - com.sun.
+      - org.springframework.
+      - com.hazelcast.
+      - io.github.noproblem2000.tsarevnacache.
+
 logging:
   level:
     root: INFO

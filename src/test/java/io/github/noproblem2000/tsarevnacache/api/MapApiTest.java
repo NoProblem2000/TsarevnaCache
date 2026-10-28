@@ -154,6 +154,8 @@ class MapApiTest extends AbstractApiTest {
         JsonNode entry = httpGet("/api/maps/crud-map/entry?key=2&keyType=LONG").body();
         assertThat(entry.path("value").path("value").path("tags").get(1).asInt()).isEqualTo(2);
         assertThat(entry.path("metadata").path("version").asLong()).isZero();
+        // per-entry statistics are disabled by default: hits are unknown instead of -1
+        assertThat(entry.path("metadata").has("hits")).isFalse();
 
         Response missing = httpGet("/api/maps/crud-map/entry?key=404&keyType=LONG");
         assertThat(missing.status()).isEqualTo(404);

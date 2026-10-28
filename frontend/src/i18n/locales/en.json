@@ -165,7 +165,7 @@
     "empty": "This map is empty",
     "noResults": "No entries match the search",
     "keyNotFound": "No entry with this key",
-    "total": "{{count}} entries in total",
+    "total": "{{total}} entries in total",
     "pageSize": "Rows per page",
     "pageInfo": "Page {{page}}",
     "pageRange": "{{from}}–{{to}}",

@@ -10,7 +10,7 @@ import com.hazelcast.core.EntryView;
  * @param cost           memory cost of the entry in bytes
  * @param creationTime   creation time
  * @param expirationTime expiration time
- * @param hits           number of hits
+ * @param hits           number of hits; {@code null} when per-entry statistics are disabled on the map
  * @param lastAccessTime last access time
  * @param lastStoredTime last time the entry was stored by a MapStore
  * @param lastUpdateTime last update time
@@ -43,7 +43,8 @@ public record EntryMetadataDTO(
                 view.getCost(),
                 time(view.getCreationTime()),
                 time(view.getExpirationTime()),
-                view.getHits(),
+                // -1 when per-entry statistics are disabled (the default since Hazelcast 4.2)
+                view.getHits() < 0 ? null : view.getHits(),
                 time(view.getLastAccessTime()),
                 time(view.getLastStoredTime()),
                 time(view.getLastUpdateTime()),

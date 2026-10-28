@@ -21,6 +21,15 @@ export function useClusterOverview() {
   });
 }
 
+/** Aggregated LocalMapStats of one map, refreshed every 5 seconds while visible. */
+export function useMapStats(mapName: string) {
+  return useQuery({
+    queryKey: queryKeys.mapStats(mapName),
+    queryFn: () => endpoints.maps.stats(mapName),
+    refetchInterval: 5_000,
+  });
+}
+
 /** Distributed objects for the sidebar, refreshed every 15 seconds. */
 export function useStructures(includeInternal: boolean) {
   return useQuery({

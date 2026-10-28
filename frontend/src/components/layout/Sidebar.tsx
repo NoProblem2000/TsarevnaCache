@@ -1,21 +1,5 @@
 import { useMemo, useState } from 'react';
-import {
-  Boxes,
-  ChevronDown,
-  ChevronRight,
-  Database,
-  Fingerprint,
-  LayoutDashboard,
-  List,
-  ListOrdered,
-  Megaphone,
-  Network,
-  RefreshCw,
-  Repeat,
-  Search,
-  Shapes,
-  type LucideIcon,
-} from 'lucide-react';
+import { ChevronDown, ChevronRight, LayoutDashboard, RefreshCw, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { NavLink } from 'react-router-dom';
 import { useStructures } from '../../api/queries';
@@ -24,20 +8,9 @@ import { formatBytes, formatNumber } from '../../lib/format';
 import { ErrorMessage } from '../ui/ErrorMessage';
 import { Spinner } from '../ui/Spinner';
 import { readShowInternal, writeShowInternal } from './sidebarPrefs';
+import { STRUCTURE_ICONS } from './structureIcons';
 import { structureRoute } from './structureRoutes';
 
-const TYPE_ICONS: Record<StructureType, LucideIcon> = {
-  MAP: Database,
-  REPLICATED_MAP: Repeat,
-  MULTI_MAP: Network,
-  QUEUE: ListOrdered,
-  SET: Boxes,
-  LIST: List,
-  TOPIC: Megaphone,
-  RELIABLE_TOPIC: Megaphone,
-  FLAKE_ID_GENERATOR: Fingerprint,
-  OTHER: Shapes,
-};
 
 /** Left navigation: overview link plus the filterable tree of distributed objects. */
 export function Sidebar() {
@@ -127,7 +100,7 @@ export function Sidebar() {
           </p>
         )}
         {groups.map(([type, items]) => {
-          const Icon = TYPE_ICONS[type];
+          const Icon = STRUCTURE_ICONS[type];
           const isCollapsed = collapsed[type] ?? false;
           return (
             <section key={type} className="mb-1">

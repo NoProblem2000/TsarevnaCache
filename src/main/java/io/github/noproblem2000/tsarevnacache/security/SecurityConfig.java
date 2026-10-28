@@ -29,6 +29,7 @@ import org.springframework.security.web.authentication.session.ChangeSessionIdAu
 import org.springframework.security.web.authentication.session.CompositeSessionAuthenticationStrategy;
 import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy;
 import org.springframework.security.web.context.DelegatingSecurityContextRepository;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
@@ -60,6 +61,14 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 public class SecurityConfig {
 
     public static final String ROLE_ADMIN = "ADMIN";
+
+    /**
+     * The bundled UI loads nothing from other origins. Inline styles are needed by the chart and
+     * editor libraries (style attributes / injected style sheets); scripts are self-hosted only.
+     */
+    static final String CONTENT_SECURITY_POLICY = "default-src 'self'; script-src 'self'; "
+            + "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; "
+            + "connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
 
     @Bean
     public SecurityFilterChain apiSecurityFilterChain(HttpSecurity http,
@@ -97,7 +106,10 @@ public class SecurityConfig {
                         .deleteCookies(sessionCookieName))
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(errorHandler)
-                        .accessDeniedHandler(errorHandler));
+                        .accessDeniedHandler(errorHandler))
+                .headers(headers -> headers
+                        .contentSecurityPolicy(csp -> csp.policyDirectives(CONTENT_SECURITY_POLICY))
+                        .referrerPolicy(referrer -> referrer.policy(ReferrerPolicy.SAME_ORIGIN)));
         return http.build();
     }
 

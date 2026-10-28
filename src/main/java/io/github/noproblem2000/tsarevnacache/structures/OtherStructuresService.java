@@ -87,9 +87,14 @@ public class OtherStructuresService {
             }
             case LIST -> {
                 long size = hz.getList(name).size();
-                int to = (int) Math.min(size, limit);
-                List<Data> items = to == 0 ? List.of() : ListSubCodec.decodeResponse(clientAccess.invokeOnPartition(
-                        ListSubCodec.encodeRequest(name, 0, to), name, partitionOf(hz.getList(name).getPartitionKey())));
+                List<Data> items;
+                try {
+                    items = listHead(name, (int) Math.min(size, limit));
+                } catch (IndexOutOfBoundsException shrunk) {
+                    // the list shrank between size() and the ranged read
+                    size = hz.getList(name).size();
+                    items = listHead(name, (int) Math.min(size, limit));
+                }
                 yield new OtherStructureDTO(type, name, size, limit, true, toValueItems(items, limit));
             }
             case MULTI_MAP -> {
@@ -205,6 +210,14 @@ public class OtherStructuresService {
                         DataRefs.encode(entry.getKey()),
                         inspector.inspect(entry.getKey())))
                 .toList();
+    }
+
+    private List<Data> listHead(String name, int count) {
+        if (count <= 0) {
+            return List.of();
+        }
+        return ListSubCodec.decodeResponse(clientAccess.invokeOnPartition(ListSubCodec.encodeRequest(name, 0, count),
+                name, partitionOf(clientAccess.hazelcast().getList(name).getPartitionKey())));
     }
 
     private int partitionOf(String partitionKey) {

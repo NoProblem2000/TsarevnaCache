@@ -28,6 +28,11 @@ public record ApiErrorResponse(
     }
 
     public static ApiErrorResponse of(ErrorCode code, String message, String path, Map<String, Object> details) {
-        return new ApiErrorResponse(Instant.now(), code.status().value(), code, message, path, details);
+        return of(code, code.status().value(), message, path, details);
+    }
+
+    /** Variant with an explicit HTTP status (framework errors such as 415 keep their own status). */
+    public static ApiErrorResponse of(ErrorCode code, int status, String message, String path, Map<String, Object> details) {
+        return new ApiErrorResponse(Instant.now(), status, code, message, path, details);
     }
 }

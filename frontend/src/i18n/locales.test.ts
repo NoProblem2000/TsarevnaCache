@@ -1,3 +1,5 @@
+/// <reference types="node" />
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import en from './locales/en.json';
 import ru from './locales/ru.json';
@@ -18,14 +20,14 @@ function keys(tree: Tree, prefix = ''): Set<string> {
   return result;
 }
 
-const BACKEND_ERROR_CODES = [
-  'AUTH_REQUIRED', 'AUTH_INVALID_CREDENTIALS', 'ACCESS_DENIED', 'CSRF_TOKEN_INVALID', 'VALIDATION_FAILED',
-  'VALUE_REQUIRED', 'VALUE_CONVERSION_FAILED', 'INVALID_JSON', 'CLASS_NOT_FOUND', 'CLASS_NOT_ALLOWED',
-  'CLASS_INSTANTIATION_FAILED', 'SCHEMA_REQUIRED', 'SCHEMA_INVALID', 'INVALID_KEY_REF', 'INVALID_CURSOR',
-  'INVALID_PREDICATE', 'CONFIRMATION_REQUIRED', 'UNSUPPORTED_STRUCTURE_TYPE', 'MAP_NOT_FOUND',
-  'STRUCTURE_NOT_FOUND', 'ENTRY_NOT_FOUND', 'ITEM_NOT_FOUND', 'NOT_FOUND', 'METHOD_NOT_ALLOWED',
-  'CLUSTER_UNAVAILABLE', 'CLUSTER_TIMEOUT', 'INTERNAL_ERROR',
-];
+/** Enum constants of a backend Java enum, read from its source so new codes cannot be forgotten. */
+function javaEnumConstants(relativePath: string, constantPattern: RegExp): string[] {
+  const source = readFileSync(new URL(`../../../src/main/java/io/github/noproblem2000/tsarevnacache/${relativePath}`, import.meta.url), 'utf8');
+  return [...source.matchAll(constantPattern)].map((match) => match[1]);
+}
+
+const BACKEND_ERROR_CODES = javaEnumConstants('api/error/ErrorCode.java', /^\s{4}([A-Z_]+)\(HttpStatus/gm);
+const DESERIALIZATION_CODES = javaEnumConstants('api/dto/DeserializationErrorCode.java', /^\s{4}([A-Z_]+)\s*[,;]?\s*$/gm);
 
 describe('locales', () => {
   it('English and Russian define the same keys', () => {
@@ -36,9 +38,18 @@ describe('locales', () => {
   });
 
   it('every backend error code is translated', () => {
+    expect(BACKEND_ERROR_CODES.length).toBeGreaterThan(20);
     for (const code of BACKEND_ERROR_CODES) {
-      expect((en as Tree & { errors: Record<string, string> }).errors[code]).toBeTruthy();
-      expect((ru as Tree & { errors: Record<string, string> }).errors[code]).toBeTruthy();
+      expect((en as Tree & { errors: Record<string, string> }).errors[code], code).toBeTruthy();
+      expect((ru as Tree & { errors: Record<string, string> }).errors[code], code).toBeTruthy();
+    }
+  });
+
+  it('every deserialization error code is translated', () => {
+    expect(DESERIALIZATION_CODES.length).toBe(7);
+    for (const code of DESERIALIZATION_CODES) {
+      expect((en as Tree & { deserialization: Record<string, string> }).deserialization[code], code).toBeTruthy();
+      expect((ru as Tree & { deserialization: Record<string, string> }).deserialization[code], code).toBeTruthy();
     }
   });
 

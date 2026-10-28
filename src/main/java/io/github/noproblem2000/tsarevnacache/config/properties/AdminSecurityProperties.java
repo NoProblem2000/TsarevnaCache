@@ -1,7 +1,10 @@
 package io.github.noproblem2000.tsarevnacache.config.properties;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.Getter;
@@ -35,6 +38,23 @@ public class AdminSecurityProperties {
 
     @Valid
     private Cors cors = new Cors();
+
+    @Valid
+    private LoginThrottle loginThrottle = new LoginThrottle();
+
+    /** Brute-force protection of {@code POST /api/auth/login}, per client address. */
+    @Getter
+    @Setter
+    public static class LoginThrottle {
+
+        /** Failed logins allowed within {@link #window} before further attempts are rejected. */
+        @Min(1)
+        private int maxFailures = 10;
+
+        /** Sliding window for counting failures; also the lockout duration. */
+        @NotNull
+        private Duration window = Duration.ofMinutes(5);
+    }
 
     /** Cross-origin settings, only needed when the UI and API are served from different origins. */
     @Getter

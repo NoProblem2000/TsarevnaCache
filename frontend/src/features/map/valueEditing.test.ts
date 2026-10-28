@@ -21,6 +21,9 @@ describe('valueEditing', () => {
     expect(editorTextToValue('{"a":[1,2]}', 'CLASS')).toEqual({ ok: true, value: { a: [1, 2] } });
     expect(editorTextToValue('{bad', 'JSON').ok).toBe(false);
     expect(editorTextToValue('42', 'LONG')).toEqual({ ok: true, value: '42' });
+    expect(editorTextToValue('  ', 'LONG').ok).toBe(false);
+    expect(editorTextToValue('', 'BOOLEAN').ok).toBe(false);
+    expect(editorTextToValue('', 'STRING')).toEqual({ ok: true, value: '' });
   });
 
   it('parses TTL inputs', () => {

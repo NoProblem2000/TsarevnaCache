@@ -1,6 +1,7 @@
 package io.github.noproblem2000.tsarevnacache.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -34,6 +35,40 @@ class AuthSecurityTest extends AbstractIntegrationTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(header().doesNotExist("WWW-Authenticate"))
                 .andExpect(jsonPath("$.code").value("AUTH_REQUIRED"));
+    }
+
+    @Test
+    void repeatedFailedLoginsAreThrottledPerAddress() throws Exception {
+        Cookie csrf = fetchCsrfCookie();
+        for (int attempt = 0; attempt < 10; attempt++) {
+            mvc.perform(post("/api/auth/login")
+                            .with(request -> {
+                                request.setRemoteAddr("10.9.9.9");
+                                return request;
+                            })
+                            .cookie(csrf).header(CSRF_HEADER, csrf.getValue())
+                            .contentType(MediaType.APPLICATION_JSON).content(credentials("wrong")))
+                    .andExpect(status().isUnauthorized());
+        }
+        mvc.perform(post("/api/auth/login")
+                        .with(request -> {
+                            request.setRemoteAddr("10.9.9.9");
+                            return request;
+                        })
+                        .cookie(csrf).header(CSRF_HEADER, csrf.getValue())
+                        .contentType(MediaType.APPLICATION_JSON).content(credentials(ADMIN_PASSWORD)))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().exists("Retry-After"))
+                .andExpect(jsonPath("$.code").value("LOGIN_RATE_LIMITED"));
+    }
+
+    @Test
+    void responsesCarryAStrictContentSecurityPolicy() throws Exception {
+        mvc.perform(get("/api/auth/csrf"))
+                .andExpect(header().string("Content-Security-Policy", containsString("script-src 'self'")))
+                .andExpect(header().string("Content-Security-Policy", containsString("frame-ancestors 'none'")))
+                .andExpect(header().string("X-Frame-Options", "DENY"))
+                .andExpect(header().string("Referrer-Policy", "same-origin"));
     }
 
     @Test

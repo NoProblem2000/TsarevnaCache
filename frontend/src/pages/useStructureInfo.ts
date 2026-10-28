@@ -7,10 +7,15 @@ import { readShowInternal } from '../components/layout/sidebarPrefs';
  * no extra request is needed. `exists` is undefined while loading.
  */
 export function useStructureInfo(type: StructureType, name: string): { info?: StructureDTO; exists?: boolean } {
-  const structures = useStructures(readShowInternal());
+  const showInternal = readShowInternal();
+  const structures = useStructures(showInternal);
   if (!structures.data) {
     return {};
   }
   const info = structures.data.groups[type]?.find((item) => item.name === name);
+  if (!info && !showInternal && name.startsWith('__')) {
+    // internal objects are not in the sidebar list; existence is unknown, the API will tell
+    return {};
+  }
   return { info, exists: info !== undefined };
 }

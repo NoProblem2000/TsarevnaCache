@@ -29,6 +29,10 @@ export function editorTextToValue(text: string, type: DataType): { ok: true; val
     const parsed = parseEditorText(text);
     return parsed.ok ? { ok: true, value: parsed.value as JsonValue } : parsed;
   }
+  // strings may be empty; every other scalar needs a value
+  if (type !== 'STRING' && text.trim() === '') {
+    return { ok: false, message: 'empty' };
+  }
   return { ok: true, value: text };
 }
 

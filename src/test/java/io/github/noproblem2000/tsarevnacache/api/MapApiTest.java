@@ -14,6 +14,10 @@ import java.util.HashSet;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
 class MapApiTest extends AbstractApiTest {
 
@@ -247,6 +251,26 @@ class MapApiTest extends AbstractApiTest {
         assertThat(httpPostJson("/api/maps/validation-map/entry", "{\"value\":\"x\",\"valueType\":\"STRING\"}").code())
                 .isEqualTo("VALUE_REQUIRED");
         assertThat(httpGet("/api/maps/validation-map/entry?keyRef=@@").code()).isEqualTo("INVALID_KEY_REF");
+
+        Response unknownEnum = httpPostJson("/api/maps/validation-map/entry",
+                "{\"key\":\"a\",\"keyType\":\"STRING\",\"value\":\"x\",\"valueType\":\"NOPE\"}");
+        assertThat(unknownEnum.status()).isEqualTo(400);
+        assertThat(unknownEnum.code()).isEqualTo("VALIDATION_FAILED");
+        assertThat(unknownEnum.body().path("details").path("fields").has("valueType")).isTrue();
+    }
+
+    @Test
+    void frameworkClientErrorsKeepTheirStatus() throws Exception {
+        hazelcastClient.getMap("media-map").put("a", "b");
+        MockHttpServletResponse response = mvc.perform(MockMvcRequestBuilders.post("/api/maps/media-map/entry")
+                        .with(SecurityMockMvcRequestPostProcessors.httpBasic(ADMIN_USER, ADMIN_PASSWORD))
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("hello"))
+                .andReturn().getResponse();
+        assertThat(response.getStatus()).isEqualTo(415);
+        JsonNode body = JSON.readTree(response.getContentAsString());
+        assertThat(body.path("code").asText()).isEqualTo("VALIDATION_FAILED");
+        assertThat(body.path("status").asInt()).isEqualTo(415);
     }
 
     private static JsonNode entryByKeyPreview(JsonNode page, String preview) {

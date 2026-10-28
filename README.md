@@ -292,6 +292,8 @@ by environment variables or any other Spring Boot property source.
 | `admin.security.username` | `ADMIN_USERNAME` | `admin` | Login of the single administrator |
 | `admin.security.password` | `ADMIN_PASSWORD` | `admin` | Plain text, or prefixed with an encoder id such as `{bcrypt}$2a$10$…` |
 | `admin.security.cors.allowed-origins` | `ADMIN_CORS_ORIGINS` | *(empty)* | Comma separated origins allowed to call the API cross-origin; only needed when the UI is hosted elsewhere |
+| `admin.security.login-throttle.max-failures` | | `10` | Failed logins per client address within the window before `POST /api/auth/login` answers `429` |
+| `admin.security.login-throttle.window` | | `5m` | Sliding window for failed logins (and lockout duration) |
 
 A warning is logged while the default credentials are in use.
 
@@ -408,16 +410,25 @@ Frontend development with hot reload (the backend must run on port 8080; `/api` 
 cd frontend && npm run dev
 ```
 
-Without a global Node installation, use the portable one downloaded by the build:
-`frontend/node/node frontend/node/node_modules/npm/bin/npm-cli.js run dev` (from `frontend/`:
-`node/node node/node_modules/npm/bin/npm-cli.js run dev`).
+Without a global Node installation, use the portable one downloaded by the build (run it from the
+`frontend/` directory):
+
+```bash
+cd frontend && node/node node/node_modules/npm/bin/npm-cli.js run dev
+```
 
 ## Security notes
 
 - **Change the default credentials** (`ADMIN_USERNAME`, `ADMIN_PASSWORD`) before exposing the
-  service; prefer a `{bcrypt}` password and put the service behind TLS.
+  service; prefer a `{bcrypt}` password and put the service behind TLS. Behind TLS also set
+  `SERVER_SERVLET_SESSION_COOKIE_SECURE=true` so the session cookie is never sent over plain HTTP.
 - The UI uses an HTTP-only, `SameSite=Strict` session cookie and a CSRF token; the browser never
   shows a Basic-auth dialog.
+- Failed logins are throttled per client address (`admin.security.login-throttle.*`, in memory per
+  instance). Behind a reverse proxy all requests share the proxy's address unless Spring Boot is told
+  to trust forwarded headers (`server.forward-headers-strategy=native`).
+- Responses carry a strict `Content-Security-Policy` (scripts, styles, fonts and API calls from the
+  service's own origin only), `X-Frame-Options: DENY` and `Referrer-Policy: same-origin`.
 - TsarevnaCache **deserializes data read from the cluster** (including Java serialization when the
   classes are on its classpath). Connect it only to clusters whose writers you trust.
 - Writing `CLASS` values binds JSON to arbitrary classes on the DTO classpath; the packages in
@@ -435,6 +446,9 @@ Without a global Node installation, use the portable one downloaded by the build
   (a schema is required).
 - Very large `long` numbers nested inside JSON values may lose precision in the browser; top-level
   numeric keys and values are transferred as text and stay exact.
+- Exact-key search with key type `JSON` serializes the typed JSON in compact form; keys stored with
+  different whitespace do not match. Open such entries from the table instead (rows address the
+  stored key through its `keyRef`).
 
 ## License
 

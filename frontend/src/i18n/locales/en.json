@@ -361,6 +361,7 @@
   "errors": {
     "AUTH_REQUIRED": "Please sign in to continue.",
     "AUTH_INVALID_CREDENTIALS": "Invalid username or password.",
+    "LOGIN_RATE_LIMITED": "Too many failed sign-in attempts. Please wait a few minutes and try again.",
     "ACCESS_DENIED": "You are not allowed to do this.",
     "CSRF_TOKEN_INVALID": "Your security token expired. Reload the page and try again.",
     "VALIDATION_FAILED": "The request is invalid.",

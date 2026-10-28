@@ -12,6 +12,8 @@ public enum ErrorCode {
 
     AUTH_REQUIRED(HttpStatus.UNAUTHORIZED),
     AUTH_INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED),
+    /** Too many failed logins from this address; see the Retry-After header. */
+    LOGIN_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS),
     ACCESS_DENIED(HttpStatus.FORBIDDEN),
     CSRF_TOKEN_INVALID(HttpStatus.FORBIDDEN),
     VALIDATION_FAILED(HttpStatus.BAD_REQUEST),

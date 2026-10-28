@@ -7,8 +7,10 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -47,6 +49,7 @@ public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final SessionAuthenticationStrategy sessionAuthenticationStrategy;
     private final SecurityContextRepository securityContextRepository;
+    private final LoginAttemptLimiter loginAttemptLimiter;
     private final SecurityContextHolderStrategy securityContextHolderStrategy =
             SecurityContextHolder.getContextHolderStrategy();
 
@@ -62,16 +65,28 @@ public class AuthController {
     public ResponseEntity<?> login(@Valid @RequestBody LoginRequest login,
                                    HttpServletRequest request,
                                    HttpServletResponse response) {
+        String client = request.getRemoteAddr();
+        long retryAfter = loginAttemptLimiter.retryAfterSeconds(client);
+        if (retryAfter > 0) {
+            ErrorCode code = ErrorCode.LOGIN_RATE_LIMITED;
+            return ResponseEntity.status(code.status())
+                    .header(HttpHeaders.RETRY_AFTER, String.valueOf(retryAfter))
+                    .body(ApiErrorResponse.of(code, "Too many failed logins, retry in " + retryAfter + "s",
+                            request.getRequestURI(), Map.of("retryAfterSeconds", retryAfter)));
+        }
+
         Authentication authentication;
         try {
             authentication = authenticationManager.authenticate(
                     UsernamePasswordAuthenticationToken.unauthenticated(login.username(), login.password()));
         } catch (AuthenticationException e) {
-            log.warn("Failed login attempt for user '{}' from {}", login.username(), request.getRemoteAddr());
+            loginAttemptLimiter.recordFailure(client);
+            log.warn("Failed login attempt for user '{}' from {}", sanitize(login.username()), client);
             ErrorCode code = ErrorCode.AUTH_INVALID_CREDENTIALS;
             return ResponseEntity.status(code.status())
                     .body(ApiErrorResponse.of(code, "Invalid username or password", request.getRequestURI()));
         }
+        loginAttemptLimiter.recordSuccess(client);
 
         sessionAuthenticationStrategy.onAuthentication(authentication, request, response);
 
@@ -88,6 +103,12 @@ public class AuthController {
 
         log.info("User '{}' logged in", authentication.getName());
         return ResponseEntity.ok(AuthUserResponse.from(authentication));
+    }
+
+    /** Keeps user supplied text from forging log lines. */
+    private static String sanitize(String value) {
+        String flat = value.replaceAll("[\\r\\n\\t]", "_");
+        return flat.length() > 64 ? flat.substring(0, 64) + "…" : flat;
     }
 
     @GetMapping("/me")

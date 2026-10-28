@@ -158,7 +158,7 @@ export function PutEntryModal({ mapName, open, onClose, onSaved }: PutEntryModal
               />
             </label>
           )}
-          {key.length > 0 && !parsedKey.ok && <p className="text-xs text-gk-danger sm:col-span-2">{t('inspector.invalidJson')}</p>}
+          {keyJson && key.length > 0 && !parsedKey.ok && <p className="text-xs text-gk-danger sm:col-span-2">{t('inspector.invalidJson')}</p>}
         </fieldset>
 
         <fieldset className="space-y-3">
@@ -218,7 +218,7 @@ export function PutEntryModal({ mapName, open, onClose, onSaved }: PutEntryModal
                 placeholder={t('putModal.valuePlaceholder')}
               />
             )}
-            {!parsedValue.ok && (
+            {valueJson && !parsedValue.ok && (
               <p className="mt-1 text-xs text-gk-danger">
                 {t('inspector.invalidJson')}: <span className="gk-mono">{parsedValue.message}</span>
               </p>

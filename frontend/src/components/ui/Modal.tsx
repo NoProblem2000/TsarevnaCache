@@ -19,27 +19,37 @@ interface ModalProps {
 export function Modal({ open, title, onClose, children, footer, widthClass = 'max-w-lg', busy = false }: ModalProps) {
   const { t } = useTranslation();
   const dialogRef = useRef<HTMLDivElement>(null);
+  // callers pass inline closures; keep the latest ones without re-running the effects below
+  const onCloseRef = useRef(onClose);
+  const busyRef = useRef(busy);
+  onCloseRef.current = onClose;
+  busyRef.current = busy;
+
+  // focus the first field once when the dialog opens (not on every re-render)
+  useEffect(() => {
+    if (open) {
+      dialogRef.current?.querySelector<HTMLElement>('input, select, textarea, button:not([data-close])')?.focus();
+    }
+  }, [open]);
 
   useEffect(() => {
     if (!open) {
       return;
     }
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !busy) {
-        onClose();
+      if (event.key === 'Escape' && !busyRef.current) {
+        onCloseRef.current();
       }
     };
     document.addEventListener('keydown', onKey);
-    const focusable = dialogRef.current?.querySelector<HTMLElement>('input, select, textarea, button:not([data-close])');
-    focusable?.focus();
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, busy, onClose]);
+  }, [open]);
 
   if (!open) {
     return null;
   }
   return createPortal(
-    <div className="fixed inset-0 z-50 flex animate-fade-in items-center justify-center bg-black/60 p-4" onMouseDown={() => !busy && onClose()}>
+    <div className="fixed inset-0 z-50 flex animate-fade-in items-center justify-center bg-black/60 p-4" onMouseDown={() => !busyRef.current && onCloseRef.current()}>
       <div
         ref={dialogRef}
         role="dialog"

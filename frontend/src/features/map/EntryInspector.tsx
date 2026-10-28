@@ -182,7 +182,7 @@ function InspectorBody({ mapName, entry, onDeleted }: { mapName: string; entry: 
             ) : (
               <input className="gk-input gk-mono" value={text} onChange={(event) => setText(event.target.value)} aria-label={t('inspector.value')} />
             )}
-            {parsed && !parsed.ok && (
+            {jsonEdited && parsed && !parsed.ok && (
               <p className="text-xs text-gk-danger">
                 {t('inspector.invalidJson')}: <span className="gk-mono">{parsed.message}</span>
               </p>

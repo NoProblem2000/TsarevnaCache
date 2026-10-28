@@ -1,5 +1,6 @@
 package io.github.noproblem2000.tsarevnacache.api.error;
 
+import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import com.hazelcast.client.HazelcastClientOfflineException;
 import com.hazelcast.core.HazelcastInstanceNotActiveException;
 import com.hazelcast.core.OperationTimeoutException;
@@ -9,10 +10,12 @@ import jakarta.validation.ConstraintViolationException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.ErrorResponse;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -79,6 +82,14 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiErrorResponse> handleUnreadable(HttpMessageNotReadableException e,
                                                              HttpServletRequest request) {
+        if (e.getCause() instanceof MismatchedInputException mismatch && !mismatch.getPath().isEmpty()) {
+            // well-formed JSON with a wrong value, e.g. an unknown enum constant for "valueType"
+            String field = mismatch.getPath().stream()
+                    .map(reference -> reference.getFieldName() != null ? reference.getFieldName() : "[" + reference.getIndex() + "]")
+                    .collect(Collectors.joining("."));
+            return respond(ErrorCode.VALIDATION_FAILED, "Invalid value for '" + field + "'", request,
+                    Map.of("fields", Map.of(field, mismatch.getOriginalMessage())));
+        }
         return respond(ErrorCode.INVALID_JSON, "Malformed request body", request, Map.of());
     }
 
@@ -112,6 +123,13 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorResponse> handleUnexpected(Exception e, HttpServletRequest request) {
+        if (e instanceof ErrorResponse framework && framework.getStatusCode().is4xxClientError()) {
+            // other Spring MVC client errors (415, 406, ...) keep their status instead of becoming a 500
+            int status = framework.getStatusCode().value();
+            ErrorCode code = status == 404 ? ErrorCode.NOT_FOUND : ErrorCode.VALIDATION_FAILED;
+            return ResponseEntity.status(status)
+                    .body(ApiErrorResponse.of(code, status, e.getMessage(), request.getRequestURI(), Map.of()));
+        }
         log.error("Unexpected error on {} {}", request.getMethod(), request.getRequestURI(), e);
         return respond(ErrorCode.INTERNAL_ERROR, "Unexpected server error", request, Map.of());
     }

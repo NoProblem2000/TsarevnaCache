@@ -1,0 +1,47 @@
+{
+  "name": "tsarevna-cache-ui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Web UI of TsarevnaCache, the administration and data inspection service for Hazelcast 5.5 clusters.",
+  "license": "SEE LICENSE IN ../LICENSE",
+  "author": "NoProblem2000 (https://github.com/NoProblem2000)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NoProblem2000/TsarevnaCache.git",
+    "directory": "frontend"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@codemirror/lang-json": "6.0.1",
+    "@fontsource/inter": "5.1.0",
+    "@fontsource/jetbrains-mono": "5.1.1",
+    "@tanstack/react-query": "5.59.20",
+    "@uiw/react-codemirror": "4.23.6",
+    "i18next": "23.16.4",
+    "lucide-react": "0.460.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-i18next": "15.1.0",
+    "react-router-dom": "6.28.0",
+    "recharts": "2.13.3"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.12",
+    "@types/node": "20.17.6",
+    "@types/react-dom": "18.3.1",
+    "@vitejs/plugin-react": "4.3.3",
+    "autoprefixer": "10.4.20",
+    "postcss": "8.4.49",
+    "tailwindcss": "3.4.15",
+    "typescript": "5.6.3",
+    "vite": "5.4.11",
+    "vitest": "2.1.5"
+  }
+}

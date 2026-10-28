@@ -13,7 +13,9 @@ target/
 
 # Frontend
 node_modules/
+frontend/node/
 frontend/dist/
+*.tsbuildinfo
 src/main/resources/static/
 
 # Runtime

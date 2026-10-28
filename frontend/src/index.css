@@ -1,0 +1,79 @@
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/600.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    @apply h-full;
+  }
+
+  body {
+    @apply bg-gk-bg font-sans text-sm text-gk-text antialiased;
+  }
+
+  ::selection {
+    @apply bg-gk-cyan/30;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #2d333b transparent;
+  }
+}
+
+@layer components {
+  .gk-panel {
+    @apply rounded-lg border border-gk-border bg-gk-panel;
+  }
+
+  .gk-card {
+    @apply rounded-lg border border-gk-border bg-gk-card;
+  }
+
+  .gk-input {
+    @apply w-full rounded-md border border-gk-border bg-gk-bg px-3 py-2 text-gk-text placeholder:text-gk-subtle
+      focus:border-gk-cyan focus:outline-none focus:ring-1 focus:ring-gk-cyan/60 disabled:opacity-50;
+  }
+
+  .gk-label {
+    @apply mb-1 block text-xs font-medium uppercase tracking-wide text-gk-muted;
+  }
+
+  .gk-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium
+      transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-gk-cyan/60
+      disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .gk-btn-primary {
+    @apply gk-btn bg-gk-cyan text-gk-bg hover:bg-gk-cyan/85;
+  }
+
+  .gk-btn-secondary {
+    @apply gk-btn border border-gk-border bg-gk-card text-gk-text hover:border-gk-cyan/60 hover:text-gk-cyan;
+  }
+
+  .gk-btn-ghost {
+    @apply gk-btn text-gk-muted hover:bg-gk-hover hover:text-gk-text;
+  }
+
+  .gk-btn-danger {
+    @apply gk-btn bg-gk-danger text-white hover:bg-gk-danger/85;
+  }
+
+  .gk-badge {
+    @apply inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[11px] leading-none;
+  }
+
+  .gk-mono {
+    @apply font-mono text-[13px];
+  }
+}

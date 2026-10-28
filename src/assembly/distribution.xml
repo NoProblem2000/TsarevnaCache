@@ -31,13 +31,13 @@
         <file>
             <source>src/dist/config/application.yml</source>
             <outputDirectory>config</outputDirectory>
-            <lineEnding>keep</lineEnding>
+            <lineEnding>unix</lineEnding>
             <fileMode>0644</fileMode>
         </file>
         <file>
             <source>src/dist/lib/README-LIBS.txt</source>
             <outputDirectory>lib</outputDirectory>
-            <lineEnding>keep</lineEnding>
+            <lineEnding>unix</lineEnding>
             <fileMode>0644</fileMode>
         </file>
         <file>
@@ -55,11 +55,13 @@
         <file>
             <source>LICENSE</source>
             <outputDirectory>/</outputDirectory>
+            <lineEnding>unix</lineEnding>
             <fileMode>0644</fileMode>
         </file>
         <file>
             <source>README.md</source>
             <outputDirectory>/</outputDirectory>
+            <lineEnding>unix</lineEnding>
             <fileMode>0644</fileMode>
         </file>
     </files>

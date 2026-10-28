@@ -215,10 +215,11 @@ binary through a fallback pipeline:
 
 `ttlSeconds`: omitted → the map's default TTL; `0` → never expire; `n` → `n` seconds.
 
-**Making your classes available.** Point `admin.hazelcast.serialization.dto-classpath` (or
-`HZ_DTO_CLASSPATH`) at jars or directories with your DTOs. They are loaded by an isolated class
-loader that both the Hazelcast client and the inspector use. Register factories and serializers the
-same way your application does:
+**Making your classes available.** With the standalone distribution, copy the jars into its `lib/`
+directory (added to the classpath by the start scripts). Alternatively point
+`admin.hazelcast.serialization.dto-classpath` (or `HZ_DTO_CLASSPATH`) at jars or directories with
+your DTOs; they are loaded by a class loader that both the Hazelcast client and the inspector use.
+Register factories and serializers the same way your application does:
 
 ```yaml
 admin:
@@ -241,11 +242,45 @@ admin:
 
 ### Requirements
 
-- **JDK 17 or newer** (the build uses the Maven Wrapper, no Maven installation needed).
+- **Java 17 or newer** to run it (a JDK to build it; the build uses the Maven Wrapper, no Maven
+  installation needed).
 - A reachable **Hazelcast 5.5** cluster (open source / Slim is fine).
 - Node.js is **not** required: the build downloads a portable Node 20 into `frontend/node`.
 
-### Build and run
+### Standalone distribution (recommended)
+
+Download `hazelcast-inspector-<version>-release.zip` (or `.tar.gz`) from the **Releases** page — or
+build it yourself with `./mvnw clean package -Prelease` (output in `target/`). The archive contains
+everything needed to run the service:
+
+```
+hazelcast-inspector-<version>/
+├── hazelcast-inspector.jar     backend + web UI in one executable jar
+├── config/application.yml      cluster members, admin credentials, serializers
+├── lib/                        drop jars with your DTO classes here
+├── bin/start.sh                Linux / macOS
+├── bin/start.bat               Windows
+├── LICENSE
+└── README.md
+```
+
+1. Unpack the archive.
+2. Edit `config/application.yml`: `admin.hazelcast.cluster-name`, `admin.hazelcast.members` and
+   **`admin.security.password`** (or set `HZ_CLUSTER_NAME`, `HZ_MEMBERS`, `ADMIN_PASSWORD`).
+3. Optionally copy jars with your DTO classes (and factories/serializers) into `lib/`.
+4. Start it and open <http://localhost:8080>:
+
+```bash
+bin/start.sh
+```
+
+On Windows run `bin\start.bat`. Both scripts check for Java 17+, use `JAVA_HOME` when set, apply
+G1 and container-friendly heap settings plus the module flags Hazelcast recommends, add `lib/` to
+the classpath (`-Dloader.path`) and load `config/application.yml` on top of the built-in defaults.
+Extra JVM options go into `JAVA_OPTS` (e.g. `JAVA_OPTS=-Xmx1g`), extra Spring Boot arguments are
+passed through (e.g. `bin/start.sh --server.port=9090`).
+
+### Build and run from source
 
 ```bash
 ./mvnw clean package
@@ -416,6 +451,14 @@ Without a global Node installation, use the portable one downloaded by the build
 ```bash
 cd frontend && node/node node/node_modules/npm/bin/npm-cli.js run dev
 ```
+
+### Releases
+
+`./mvnw clean package -Prelease` builds the standalone archives
+(`target/hazelcast-inspector-<version>-release.zip` and `.tar.gz`). `scripts/create-release.sh 1.0.0`
+prepares a release branch, sets the version, builds and checks the archive, tags `v1.0.0` and pushes;
+GitHub Actions (`.github/workflows/release.yml`) and GitLab CI (`.gitlab-ci.yml`) then publish the
+archives as a release. Details: [`docs/RELEASING.md`](docs/RELEASING.md).
 
 ## Security notes
 

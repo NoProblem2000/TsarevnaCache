@@ -1,0 +1,95 @@
+server:
+  port: ${SERVER_PORT:8080}
+  compression:
+    enabled: true
+    mime-types: application/json,text/html,text/css,application/javascript
+  servlet:
+    session:
+      timeout: 30m
+      cookie:
+        name: TSAREVNA_SESSION
+        http-only: true
+        same-site: strict
+  error:
+    include-message: never
+    include-stacktrace: never
+    include-binding-errors: never
+
+spring:
+  application:
+    name: tsarevna-cache
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+  main:
+    banner-mode: off
+
+admin:
+  # ---------------------------------------------------------------------------
+  # Built-in administrator account.
+  # The password may be plain text or carry a Spring Security encoder prefix,
+  # e.g. "{bcrypt}$2a$10$..." or "{noop}secret". Plain text is treated as {noop}.
+  # ALWAYS override the defaults via environment variables in real deployments.
+  # ---------------------------------------------------------------------------
+  security:
+    username: ${ADMIN_USERNAME:admin}
+    password: ${ADMIN_PASSWORD:admin}
+    cors:
+      # Only needed when the UI is served from a different origin than the API.
+      # The Vite dev server proxies /api, so this normally stays empty.
+      allowed-origins: ${ADMIN_CORS_ORIGINS:}
+
+  # ---------------------------------------------------------------------------
+  # Hazelcast client connection.
+  # ---------------------------------------------------------------------------
+  hazelcast:
+    cluster-name: ${HZ_CLUSTER_NAME:dev}
+    # Comma separated list of member addresses (host:port).
+    members: ${HZ_MEMBERS:127.0.0.1:5701}
+    instance-name: tsarevna-admin-client
+    labels:
+      - tsarevna-admin
+    smart-routing: true
+    connection-timeout: 5s
+    invocation-timeout: 60s
+    heartbeat-interval: 5s
+    heartbeat-timeout: 60s
+    # true: the application starts even if the cluster is unreachable and
+    # connects in the background (the UI shows the cluster as Offline).
+    async-start: true
+    # ON | OFF | ASYNC
+    reconnect-mode: ASYNC
+    retry:
+      initial-backoff: 1s
+      max-backoff: 30s
+      multiplier: 1.5
+      jitter: 0.2
+      # Give up connecting after this period. Leave unset to retry forever.
+      # cluster-connect-timeout: 5m
+
+    serialization:
+      # Extra jars or directories (every *.jar inside is added) that contain
+      # your DTO classes, factories and serializers. They are loaded by an
+      # isolated class loader used by the Hazelcast client and the inspector.
+      dto-classpath: ${HZ_DTO_CLASSPATH:}
+      # Classes to register for Compact serialization (zero-config reflective).
+      compact-classes: []
+      # Fully qualified names of com.hazelcast.nio.serialization.compact.CompactSerializer implementations.
+      compact-serializers: []
+      # factoryId -> fully qualified DataSerializableFactory class name.
+      data-serializable-factories: {}
+      # factoryId -> fully qualified PortableFactory class name.
+      portable-factories: {}
+      portable-version: 0
+      # Custom StreamSerializer / ByteArraySerializer registrations.
+      custom-serializers: []
+      #  - type-class: com.example.Money
+      #    serializer-class: com.example.MoneySerializer
+
+logging:
+  level:
+    root: INFO
+    com.hazelcast: INFO
+    io.github.noproblem2000.tsarevnacache: INFO

@@ -1,0 +1,31 @@
+# Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+.factorypath
+
+# Frontend
+node_modules/
+frontend/dist/
+src/main/resources/static/
+
+# Runtime
+logs/
+*.log
+dto-libs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local overrides
+application-local.yml
+.env
+.env.*

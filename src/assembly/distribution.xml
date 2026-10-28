@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Standalone distribution of the admin service (built with: mvn clean package -Prelease).
+
+    hazelcast-inspector-<version>/
+    ├── hazelcast-inspector.jar     executable Spring Boot jar (backend + UI)
+    ├── config/application.yml      external configuration (cluster, credentials, ...)
+    ├── lib/README-LIBS.txt         drop custom DTO / serializer jars here
+    ├── bin/start.sh, bin/start.bat start scripts
+    ├── LICENSE
+    └── README.md
+-->
+<assembly xmlns="http://maven.apache.org/ASSEMBLY/2.2.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/ASSEMBLY/2.2.0 https://maven.apache.org/xsd/assembly-2.2.0.xsd">
+    <id>release</id>
+    <formats>
+        <format>zip</format>
+        <format>tar.gz</format>
+    </formats>
+    <includeBaseDirectory>true</includeBaseDirectory>
+    <baseDirectory>${distribution.name}-${project.version}</baseDirectory>
+
+    <files>
+        <file>
+            <source>${project.build.directory}/${project.build.finalName}.jar</source>
+            <destName>${distribution.name}.jar</destName>
+            <outputDirectory>/</outputDirectory>
+            <fileMode>0644</fileMode>
+        </file>
+        <file>
+            <source>src/dist/config/application.yml</source>
+            <outputDirectory>config</outputDirectory>
+            <lineEnding>keep</lineEnding>
+            <fileMode>0644</fileMode>
+        </file>
+        <file>
+            <source>src/dist/lib/README-LIBS.txt</source>
+            <outputDirectory>lib</outputDirectory>
+            <lineEnding>keep</lineEnding>
+            <fileMode>0644</fileMode>
+        </file>
+        <file>
+            <source>src/dist/bin/start.sh</source>
+            <outputDirectory>bin</outputDirectory>
+            <lineEnding>unix</lineEnding>
+            <fileMode>0755</fileMode>
+        </file>
+        <file>
+            <source>src/dist/bin/start.bat</source>
+            <outputDirectory>bin</outputDirectory>
+            <lineEnding>dos</lineEnding>
+            <fileMode>0644</fileMode>
+        </file>
+        <file>
+            <source>LICENSE</source>
+            <outputDirectory>/</outputDirectory>
+            <fileMode>0644</fileMode>
+        </file>
+        <file>
+            <source>README.md</source>
+            <outputDirectory>/</outputDirectory>
+            <fileMode>0644</fileMode>
+        </file>
+    </files>
+</assembly>

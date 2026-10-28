@@ -7,8 +7,8 @@ import react from '@vitejs/plugin-react';
  * - `npm run dev` serves the UI on http://localhost:5173 and proxies `/api` to the Spring Boot
  *   backend (http://localhost:8080 by default, override with TSAREVNA_API_URL), so cookies and
  *   CSRF work exactly as in production (same origin).
- * - `npm run build` writes the bundle into the backend's static resources, so the packaged jar
- *   serves the UI itself.
+ * - `npm run build` writes the bundle to frontend/dist; Maven copies it into target/classes/static,
+ *   so the packaged jar serves the UI itself.
  */
 export default defineConfig({
   plugins: [react()],
@@ -22,7 +22,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '../src/main/resources/static',
+    outDir: 'dist',
     emptyOutDir: true,
     sourcemap: false,
     chunkSizeWarningLimit: 1500,

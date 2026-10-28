@@ -68,6 +68,9 @@
         <frontend-maven-plugin.version>1.15.1</frontend-maven-plugin.version>
         <frontend.node.version>v20.18.0</frontend.node.version>
         <frontend.skip>false</frontend.skip>
+
+        <!-- Name of the standalone distribution (archive, folder and jar inside it) -->
+        <distribution.name>hazelcast-inspector</distribution.name>
     </properties>
 
     <dependencies>
@@ -153,7 +156,10 @@
                 </configuration>
             </plugin>
             <plugin>
-                <!-- Builds the React UI into src/main/resources/static before resources are processed -->
+                <!--
+                    Builds the React UI: downloads Node/npm into frontend/node, runs npm ci, the UI unit
+                    tests and the Vite build (output: frontend/dist). Skip with -Dfrontend.skip=true.
+                -->
                 <groupId>com.github.eirslett</groupId>
                 <artifactId>frontend-maven-plugin</artifactId>
                 <version>${frontend-maven-plugin.version}</version>
@@ -206,9 +212,38 @@
                 </executions>
             </plugin>
             <plugin>
+                <!-- Copies the UI bundle (frontend/dist) into target/classes/static, served by Spring Boot -->
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>copy-frontend-bundle</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${frontend.skip}</skip>
+                            <outputDirectory>${project.build.outputDirectory}/static</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.basedir}/frontend/dist</directory>
+                                    <filtering>false</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
+                    <!--
+                        ZIP layout = PropertiesLauncher: the jar still runs with "java -jar", and
+                        -Dloader.path=lib/ adds external jars (custom DTOs, factories, serializers).
+                    -->
+                    <layout>ZIP</layout>
                     <excludes>
                         <exclude>
                             <groupId>org.projectlombok</groupId>
@@ -219,4 +254,69 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <!--
+                Standalone distribution: mvn clean package -Prelease
+                -> target/hazelcast-inspector-<version>-release.zip and .tar.gz
+                   (executable jar with the UI, external config, lib/ for DTO jars, start scripts).
+            -->
+            <id>release</id>
+            <properties>
+                <frontend.skip>false</frontend.skip>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <!-- A release must never be built without the UI -->
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-enforcer-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>release-requires-frontend</id>
+                                <goals>
+                                    <goal>enforce</goal>
+                                </goals>
+                                <configuration>
+                                    <rules>
+                                        <requireProperty>
+                                            <property>frontend.skip</property>
+                                            <regex>false</regex>
+                                            <regexMessage>Release builds include the UI; remove -Dfrontend.skip=true.</regexMessage>
+                                        </requireProperty>
+                                        <requireJavaVersion>
+                                            <version>[17,)</version>
+                                        </requireJavaVersion>
+                                    </rules>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-assembly-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>make-distribution</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>single</goal>
+                                </goals>
+                                <configuration>
+                                    <descriptors>
+                                        <descriptor>src/assembly/distribution.xml</descriptor>
+                                    </descriptors>
+                                    <finalName>${distribution.name}-${project.version}</finalName>
+                                    <appendAssemblyId>true</appendAssemblyId>
+                                    <attach>false</attach>
+                                    <tarLongFileMode>posix</tarLongFileMode>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

@@ -1,0 +1,57 @@
+# =============================================================================
+#  Hazelcast Inspector (TsarevnaCache) - external configuration
+#
+#  This file is loaded on top of the defaults built into hazelcast-inspector.jar
+#  (bin/start.sh / bin/start.bat pass it via --spring.config.additional-location).
+#  Only the settings below are usually changed; every other property of the
+#  built-in application.yml can be overridden here as well.
+#
+#  ${NAME:default} reads the environment variable NAME and falls back to the
+#  default, so the same file works for containers and for local installs.
+# =============================================================================
+
+server:
+  port: ${SERVER_PORT:8080}
+  # Uncomment when the service is only reachable through HTTPS (TLS terminating proxy):
+  # servlet:
+  #   session:
+  #     cookie:
+  #       secure: true
+  # Uncomment behind a reverse proxy that sets X-Forwarded-* headers:
+  # forward-headers-strategy: native
+
+admin:
+  # ---------------------------------------------------------------------------
+  # Administrator account - CHANGE THE PASSWORD before exposing the service.
+  # Plain text or an encoded value such as "{bcrypt}$2a$10$...".
+  # ---------------------------------------------------------------------------
+  security:
+    username: ${ADMIN_USERNAME:admin}
+    password: ${ADMIN_PASSWORD:admin}
+
+  # ---------------------------------------------------------------------------
+  # Hazelcast cluster to connect to.
+  # ---------------------------------------------------------------------------
+  hazelcast:
+    cluster-name: ${HZ_CLUSTER_NAME:dev}
+    # Comma separated host:port list of (some of) the cluster members.
+    members: ${HZ_MEMBERS:127.0.0.1:5701}
+
+    # Custom DTOs: jars placed in ../lib are already on the classpath (see
+    # lib/README-LIBS.txt). Register factories and serializers your
+    # application uses, exactly as in its own Hazelcast configuration:
+    serialization:
+      compact-serializers: []
+      #  - com.example.serialization.MoneyCompactSerializer
+      data-serializable-factories: {}
+      #  1000: com.example.serialization.BillingDataSerializableFactory
+      portable-factories: {}
+      #  2000: com.example.serialization.LegacyPortableFactory
+      custom-serializers: []
+      #  - type-class: com.example.Money
+      #    serializer-class: com.example.serialization.MoneyStreamSerializer
+
+# Write a log file next to the distribution (optional):
+# logging:
+#   file:
+#     name: logs/hazelcast-inspector.log

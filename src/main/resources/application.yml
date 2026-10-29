@@ -107,6 +107,28 @@ admin:
     file: ${DTO_SCHEMAS_FILE:./config/dto-schemas.json}
 
   # ---------------------------------------------------------------------------
+  # Automated healthcheck & best practices analyzer (/api/healthcheck).
+  # ---------------------------------------------------------------------------
+  healthcheck:
+    # Background runs; "Run Check Now" and the REST API work either way.
+    enabled: ${HEALTHCHECK_ENABLED:true}
+    interval-ms: 60000
+    initial-delay-ms: 15000
+    # Ignore list (relative to the working directory, i.e. the distribution root).
+    ignores-file: ${HEALTHCHECK_IGNORES_FILE:./config/healthcheck-ignores.json}
+    # Entries read per map (TTL / max idle, DTOs without schema) and maps sampled per run.
+    sample-size: 20
+    max-sampled-maps: 100
+    thresholds:
+      unbounded-min-entries: 1000
+      unbounded-warning-memory: 50MB
+      unbounded-critical-memory: 250MB
+      zombie-min-entries: 100
+      latency-ms: 25
+      latency-min-operations: 50
+      queue-backlog: 5000
+
+  # ---------------------------------------------------------------------------
   # Value inspector (JSON rendering of keys/values and typed writes).
   # ---------------------------------------------------------------------------
   inspector:

@@ -26,6 +26,7 @@ never seen.
 - [Architecture](#architecture)
 - [How custom DTO deserialization works](#how-custom-dto-deserialization-works)
 - [Working with Custom DTOs (Two Approaches)](#working-with-custom-dtos-two-approaches)
+- [Healthcheck & Best Practices Analyzer](#healthcheck--best-practices-analyzer)
 - [Getting started](#getting-started)
 - [Configuration](#configuration)
 - [REST API](#rest-api)
@@ -84,6 +85,13 @@ TsarevnaCache answers them from a single self-contained jar:
 - **Memory & Performance Stats**: `LocalMapStats` aggregated over all members — owned / backup
   entries and memory, heap cost, Merkle trees cost, hits, get / put / set / remove counts and
   latencies, events, evictions, expirations, queries, near cache statistics and a per-member breakdown.
+
+**Healthcheck & advisor**
+- Seven best practice rules (single member, unbounded maps without TTL, write-only maps, missing
+  backups, high latency, queue backlogs, DTOs without schema) checked every minute and on demand.
+- Health score in the top bar, issue cards with the current values, a recommendation and a link to
+  the affected structure; ignore list with reasons (`config/healthcheck-ignores.json`).
+- Prometheus exporter for the score, issue counts and map sizes.
 
 **Other structures**
 - Size and the first 50 items of queues, sets, lists, multimaps and replicated maps; remove single
@@ -419,6 +427,98 @@ with the value type **Custom class** (`CLASS`) and the fully qualified class nam
 schemas win and the jar factory handles every class id without a schema. So you can start with the
 Studio and add a jar later, or the other way round.
 
+## Healthcheck & Best Practices Analyzer
+
+Like the health checks of the Hazelcast Management Center, a built-in analyzer inspects the cluster,
+its maps and queues **every minute** (`@Scheduled`) and on demand (**Run Check Now** on the
+*Healthcheck* screen, `POST /api/healthcheck/run`). The top bar shows the result next to the
+connection status (`92% · Healthy`, `2 Warnings`, `1 Critical`); a click opens the screen.
+
+### Rules
+
+| Rule (`checkType`) | Severity | Fires when |
+|---|---|---|
+| `CLUSTER_SINGLE_MEMBER` | WARNING | the cluster has exactly one data member — no fault tolerance, partition backups have nowhere to live |
+| `MAP_UNBOUNDED_NO_TTL` | WARNING, CRITICAL above 250 MB | a map has more than 1 000 entries or more than 50 MB owned memory and **every sampled entry** has neither TTL nor max idle (stored forever, risk of `OutOfMemoryError`) |
+| `MAP_ZOMBIE_WRITE_ONLY` | WARNING | more than 100 entries and put/set operations, but `getOperationCount == 0` and `hits == 0` since the members started ("dead cache") |
+| `MAP_BACKUP_DISABLED_OR_BROKEN` | CRITICAL | at least 2 data members, `ownedEntryCount > 0` but `backupEntryCount == 0` (`backup-count: 0` — a member failure loses data) |
+| `MAP_HIGH_LATENCY` | WARNING | `totalGetLatency / getOperationCount` or `totalPutLatency / putOperationCount` above 25 ms (after at least 50 operations) |
+| `QUEUE_BACKLOG_GROWTH` | WARNING | an `IQueue` holds more than 5 000 items |
+| `DTO_UNREGISTERED_SCHEMA` | WARNING, INFO | sampled values are `IdentifiedDataSerializable` objects without a DTO schema — WARNING when a schema in the [DTO Schema Studio](#approach-1-recommended--zero-dependencies-built-in-dto-schema-studio) makes them readable at once, INFO when their factory id additionally needs a restart |
+
+Map statistics come from the member metrics (the same numbers as *Memory & Performance Stats*).
+TTL / max idle and unregistered DTOs are checked on a sample of `sample-size` entries (20) of the
+`max-sampled-maps` largest maps (100). All thresholds are configurable (`admin.healthcheck.thresholds.*`).
+
+Every finding is a `HealthCheckIssue`:
+
+```json
+{
+  "issueId": "MAP_UNBOUNDED_NO_TTL:user_sessions",
+  "checkType": "MAP_UNBOUNDED_NO_TTL",
+  "severity": "CRITICAL",
+  "targetType": "IMAP",
+  "targetName": "user_sessions",
+  "currentValue": "entries=1200000, memory=450.0 MB, ttl=infinite, maxIdle=infinite (20 of 20 sampled entries)",
+  "recommendationCode": "MAP_UNBOUNDED_NO_TTL_CRITICAL",
+  "detectedAt": "2026-10-29T10:00:00Z",
+  "details": { "entries": 1200000, "memoryBytes": 471859200, "sampled": 20, "withoutExpiry": 20 }
+}
+```
+
+`issueId` is deterministic (`<checkType>:<target>`, DTOs: `DTO_UNREGISTERED_SCHEMA:<factoryId>:<classId>`)
+and `detectedAt` keeps the time of the first run that found the issue. The UI translates the rule
+and the recommendation (`recommendationCode`) and links the target: the map's data browser or
+statistics, the queue, or the DTO Schema Studio with the ids pre-filled.
+
+**Health score.** `100 − 25 × critical − 10 × warning` active issues (never below 0); INFO issues
+and ignored issues do not count. Status: `CRITICAL` with any critical issue, `DEGRADED` with a
+warning, `HEALTHY` otherwise. When the cluster cannot be reached the score is 0 and the status
+`CRITICAL`.
+
+### Ignore list
+
+A finding that does not apply — e.g. a reference map that intentionally never expires — is hidden
+with **Ignore Check**, for this target (`MAP_UNBOUNDED_NO_TTL:countries`) or for the whole rule
+(`MAP_UNBOUNDED_NO_TTL:*`), with a reason. The list is stored in `config/healthcheck-ignores.json`
+(`admin.healthcheck.ignores-file`), applies at once without a new run and can be shared like
+`dto-schemas.json`. Hidden issues are listed under **Ignored Rules** with a **Restore** button.
+
+### Prometheus
+
+`GET /api/healthcheck/prometheus` serves the latest run in the text exposition format 0.0.4
+(`text/plain; version=0.0.4`):
+
+```text
+hazelcast_inspector_health_score 90
+hazelcast_inspector_health_issues_total{severity="CRITICAL"} 0
+hazelcast_inspector_health_issues_total{severity="WARNING"} 1
+hazelcast_inspector_health_issues_total{severity="INFO"} 0
+hazelcast_inspector_health_ignored_issues_total 1
+hazelcast_inspector_cluster_up 1
+hazelcast_inspector_health_last_run_timestamp_seconds 1861600000.000
+hazelcast_inspector_map_entries_total{map="user_sessions"} 1200000
+hazelcast_inspector_map_memory_bytes{map="user_sessions",type="owned"} 471859200
+hazelcast_inspector_map_memory_bytes{map="user_sessions",type="backup"} 471859200
+```
+
+Like every `/api` endpoint it requires the administrator; Prometheus authenticates with HTTP Basic:
+
+```yaml
+scrape_configs:
+  - job_name: hazelcast-inspector
+    metrics_path: /api/healthcheck/prometheus
+    scrape_interval: 60s
+    basic_auth:
+      username: admin
+      password: <ADMIN_PASSWORD>
+    static_configs:
+      - targets: ['inspector.example.com:8080']
+```
+
+The *Prometheus Metrics URL* button on the Healthcheck screen shows the URL, this snippet and a
+live preview.
+
 ## Getting started
 
 ### Requirements
@@ -586,6 +686,20 @@ A warning is logged while the default credentials are in use.
 |---|---|---|---|
 | `file` | `DTO_SCHEMAS_FILE` | `./config/dto-schemas.json` | Schemas of dynamic `IdentifiedDataSerializable` DTOs and the factory mapping |
 
+### Healthcheck — `admin.healthcheck.*`
+
+| Property | Env variable | Default | Description |
+|---|---|---|---|
+| `enabled` | `HEALTHCHECK_ENABLED` | `true` | Background runs (manual runs and the API work either way) |
+| `interval-ms` / `initial-delay-ms` | | `60000` / `15000` | Period and first delay of the background runs |
+| `ignores-file` | `HEALTHCHECK_IGNORES_FILE` | `./config/healthcheck-ignores.json` | Ignore list |
+| `sample-size` / `max-sampled-maps` | | `20` / `100` | Entries read per map, maps sampled per run (largest first) |
+| `thresholds.unbounded-min-entries` | | `1000` | `MAP_UNBOUNDED_NO_TTL`: map size |
+| `thresholds.unbounded-warning-memory` / `thresholds.unbounded-critical-memory` | | `50MB` / `250MB` | `MAP_UNBOUNDED_NO_TTL`: owned memory for WARNING / CRITICAL |
+| `thresholds.zombie-min-entries` | | `100` | `MAP_ZOMBIE_WRITE_ONLY`: minimum entries |
+| `thresholds.latency-ms` / `thresholds.latency-min-operations` | | `25` / `50` | `MAP_HIGH_LATENCY`: average latency and operations needed |
+| `thresholds.queue-backlog` | | `5000` | `QUEUE_BACKLOG_GROWTH`: queue size |
+
 ### Explorer limits — `admin.explorer.*`
 
 | Property | Default | Description |
@@ -637,6 +751,11 @@ All endpoints below `/api` require the administrator. Errors are returned as
 | `DELETE` | `/api/schemas/{factoryId}/{classId}` | Delete a DTO schema |
 | `GET` | `/api/schemas/export` | Download `dto-schemas.json` |
 | `POST` | `/api/schemas/import?mode=replace\|merge` | Upload `dto-schemas.json` |
+| `GET` | `/api/healthcheck/report` | Latest healthcheck: score, status, active and ignored issues |
+| `POST` | `/api/healthcheck/run` | Run all checks now |
+| `POST` | `/api/healthcheck/ignore` | Add `{ "issueId", "reason" }` to the ignore list (`CHECK_TYPE:*` = whole rule) |
+| `DELETE` | `/api/healthcheck/ignore/{issueId}` or `?issueId=` | Remove an ignore list entry |
+| `GET` | `/api/healthcheck/prometheus` | Prometheus metrics (`text/plain; version=0.0.4`) |
 
 Scripts can use HTTP Basic; such requests are exempt from CSRF checks:
 

@@ -64,6 +64,19 @@ admin:
   dto-schemas:
     file: ${DTO_SCHEMAS_FILE:./config/dto-schemas.json}
 
+  # ---------------------------------------------------------------------------
+  # Healthcheck & advisor (runs every minute; see README "Healthcheck").
+  # ---------------------------------------------------------------------------
+  healthcheck:
+    enabled: ${HEALTHCHECK_ENABLED:true}
+    ignores-file: ${HEALTHCHECK_IGNORES_FILE:./config/healthcheck-ignores.json}
+    # thresholds:
+    #   unbounded-min-entries: 1000
+    #   unbounded-warning-memory: 50MB
+    #   unbounded-critical-memory: 250MB
+    #   latency-ms: 25
+    #   queue-backlog: 5000
+
 # Write a log file next to the distribution (optional):
 # logging:
 #   file:

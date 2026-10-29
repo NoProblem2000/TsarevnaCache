@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, FileCode2, LayoutDashboard, RefreshCw, Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileCode2, HeartPulse, LayoutDashboard, RefreshCw, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { NavLink } from 'react-router-dom';
-import { useDtoSchemas, useStructures } from '../../api/queries';
+import { useDtoSchemas, useHealthReport, useStructures } from '../../api/queries';
 import { STRUCTURE_TYPES, type StructureDTO, type StructureType } from '../../api/types';
 import { formatBytes, formatNumber } from '../../lib/format';
 import { ErrorMessage } from '../ui/ErrorMessage';
@@ -20,6 +20,8 @@ export function Sidebar() {
   const [collapsed, setCollapsed] = useState<Partial<Record<StructureType, boolean>>>({});
   const structures = useStructures(showInternal);
   const schemas = useDtoSchemas();
+  const health = useHealthReport();
+  const attention = health.data ? health.data.counts.critical + health.data.counts.warning : 0;
 
   const groups = useMemo(() => {
     const needle = filter.trim().toLowerCase();
@@ -54,6 +56,25 @@ export function Sidebar() {
         >
           <LayoutDashboard className="h-4 w-4" aria-hidden />
           {t('sidebar.overview')}
+        </NavLink>
+        <NavLink
+          to="/healthcheck"
+          className={({ isActive }) =>
+            `mt-0.5 flex items-center gap-2 rounded-md px-2.5 py-2 transition-colors ${
+              isActive ? 'bg-gk-cyan/10 text-gk-cyan' : 'text-gk-text hover:bg-gk-hover'
+            }`
+          }
+        >
+          <HeartPulse className="h-4 w-4" aria-hidden />
+          <span className="flex-1">{t('sidebar.healthcheck')}</span>
+          {health.data && attention > 0 && (
+            <span
+              className={`gk-badge ${health.data.counts.critical > 0 ? 'bg-gk-danger/20 text-gk-danger' : 'bg-gk-warning/20 text-gk-warning'}`}
+              title={t('sidebar.healthcheckCount', { count: attention })}
+            >
+              {attention}
+            </span>
+          )}
         </NavLink>
         <NavLink
           to="/schemas"

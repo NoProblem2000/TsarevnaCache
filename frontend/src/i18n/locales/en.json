@@ -67,7 +67,10 @@
     "schemas": "DTO Schemas",
     "schemasHint": "DTO Schema Studio: IdentifiedDataSerializable DTOs without jars",
     "schemasCount_one": "{{count}} registered DTO",
-    "schemasCount_other": "{{count}} registered DTOs"
+    "schemasCount_other": "{{count}} registered DTOs",
+    "healthcheck": "Healthcheck",
+    "healthcheckCount_one": "{{count}} issue needs attention",
+    "healthcheckCount_other": "{{count}} issues need attention"
   },
   "types": {
     "plural": {
@@ -411,7 +414,8 @@
     "UNKNOWN": "Something went wrong.",
     "DTO_SCHEMA_INVALID": "The DTO schema is invalid.",
     "DTO_SCHEMA_NOT_FOUND": "No DTO schema is registered for this class.",
-    "DTO_SOURCE_NOT_RECOGNIZED": "Nothing usable for a schema was found in the Java source."
+    "DTO_SOURCE_NOT_RECOGNIZED": "Nothing usable for a schema was found in the Java source.",
+    "HEALTHCHECK_IGNORE_NOT_FOUND": "This check is not in the ignore list (anymore)."
   },
   "deserialization": {
     "CLASS_NOT_FOUND": "The class of this object is not on the admin classpath.",
@@ -558,6 +562,156 @@
       "importing": "Importing…",
       "done_one": "Imported: {{count}} schema registered",
       "done_other": "Imported: {{count}} schemas registered"
+    }
+  },
+  "health": {
+    "title": "Healthcheck & Advisor",
+    "subtitle": "Automated checks of the cluster, its maps and queues against Hazelcast best practices",
+    "score": "Score",
+    "scoreAria": "Health score {{score}} of 100",
+    "status": {
+      "HEALTHY": "Healthy",
+      "DEGRADED": "Degraded",
+      "CRITICAL": "Critical",
+      "UNAVAILABLE": "Not checked"
+    },
+    "statusHint": {
+      "HEALTHY": "No active warnings or critical issues.",
+      "DEGRADED": "Warnings need attention, nothing critical.",
+      "CRITICAL": "At least one critical issue risks data loss or an outage.",
+      "UNAVAILABLE": "The cluster could not be reached during the last run."
+    },
+    "severity": {
+      "CRITICAL": "Critical",
+      "WARNING": "Warning",
+      "INFO": "Info"
+    },
+    "counters": {
+      "CRITICAL": "Critical",
+      "WARNING": "Warnings",
+      "INFO": "Info",
+      "ignored": "Ignored"
+    },
+    "targetTypes": {
+      "CLUSTER": "Cluster",
+      "IMAP": "IMap",
+      "IQUEUE": "IQueue",
+      "DTO_SCHEMA": "DTO schema"
+    },
+    "badge": {
+      "title": "Health score {{score}}% — open the Healthcheck",
+      "healthy": "Healthy",
+      "warnings_one": "{{count}} Warning",
+      "warnings_other": "{{count}} Warnings",
+      "critical_one": "{{count}} Critical",
+      "critical_other": "{{count}} Critical",
+      "unavailable": "Not checked"
+    },
+    "runNow": "Run Check Now",
+    "running": "Checking…",
+    "ranNow": "Checks completed",
+    "runFailed": "The checks could not be run",
+    "lastRun": "Last check",
+    "schedule": "Schedule",
+    "every": "every {{interval}}",
+    "manualOnly": "manual runs only",
+    "coverage": "Coverage",
+    "coverageValue": "{{maps}} maps, {{sampled}} sampled · {{ms}} ms",
+    "unavailable": "The last run could not reach the cluster, so no structure was checked.",
+    "tabs": {
+      "active": "Active Issues ({{count}})",
+      "ignored": "Ignored Rules ({{count}})"
+    },
+    "filterSeverity": "Severity",
+    "filterTarget": "Structure",
+    "allTargets": "All",
+    "noIssues": "Everything looks good",
+    "noIssuesHint": "No rule found a problem in the last run. The checks repeat automatically.",
+    "noMatches": "No issue matches the filter.",
+    "detectedAt": "since {{time}}",
+    "currentValue": "Current value",
+    "recommendation": "Recommendation / Best Practice",
+    "ignoreCheck": "Ignore Check",
+    "restore": "Restore",
+    "ignored": "Check ignored: it no longer affects the health score",
+    "restored": "Check restored",
+    "restoreFailed": "The check could not be restored",
+    "ignoredBy": "Hidden by",
+    "hides_one": "hides {{count}} current issue",
+    "hides_other": "hides {{count}} current issues",
+    "hiddenIssues": "Currently hidden issues",
+    "ignoredEmpty": "Nothing is ignored",
+    "ignoredEmptyHint": "Use “Ignore Check” on an issue that does not apply, e.g. a reference map that intentionally never expires.",
+    "ignoredColumns": {
+      "rule": "Rule",
+      "scope": "Scope",
+      "reason": "Reason",
+      "added": "Added"
+    },
+    "actions": {
+      "configureDto": "Configure DTO",
+      "inspectMap": "Inspect Map",
+      "openStats": "Open Statistics",
+      "openQueue": "Open Queue",
+      "openOverview": "Cluster Overview"
+    },
+    "ignoreDialog": {
+      "title": "Ignore check",
+      "scope": "Ignore",
+      "scopeTarget": "This target only",
+      "scopeRule": "The whole rule",
+      "reason": "Reason",
+      "reasonPlaceholder": "e.g. static reference data, entries are removed by a nightly job",
+      "hint": "Stored in config/healthcheck-ignores.json. Ignored issues stay visible under “Ignored Rules” and can be restored at any time."
+    },
+    "prometheus": {
+      "button": "Prometheus Metrics URL",
+      "title": "Prometheus exporter",
+      "url": "Metrics URL",
+      "authHint": "The endpoint requires the administrator account (HTTP Basic). The values are refreshed by the background checks every minute.",
+      "scrapeConfig": "prometheus.yml",
+      "preview": "Current metrics"
+    },
+    "checks": {
+      "CLUSTER_SINGLE_MEMBER": {
+        "title": "Single member cluster",
+        "description": "The cluster has only one data member. Partition backups have nowhere to live, so a restart or crash of this member loses all data and the cluster is unavailable meanwhile."
+      },
+      "MAP_UNBOUNDED_NO_TTL": {
+        "title": "Unbounded map without TTL",
+        "description": "The map is large and the sampled entries have neither a time-to-live nor a max idle: nothing ever expires. Without an eviction policy the map grows until the members run out of memory (OutOfMemoryError)."
+      },
+      "MAP_ZOMBIE_WRITE_ONLY": {
+        "title": "Write-only map (dead cache)",
+        "description": "Entries are written to this map but it has never been read: no get operation and no hit since the members started. The data occupies memory without being used by any application."
+      },
+      "MAP_BACKUP_DISABLED_OR_BROKEN": {
+        "title": "No backups",
+        "description": "The cluster has several data members, but this map holds no backup entries (backup-count is 0). If a member fails, the entries it owned are lost."
+      },
+      "MAP_HIGH_LATENCY": {
+        "title": "High map latency",
+        "description": "The average get or put latency of this map is above the threshold. Clients wait for every operation; typical causes are large values, expensive (de)serialization, MapStore calls or overloaded members."
+      },
+      "QUEUE_BACKLOG_GROWTH": {
+        "title": "Queue backlog",
+        "description": "The queue holds more items than the backlog threshold: consumers are slower than producers, stuck or not running. The items occupy member memory and are processed late."
+      },
+      "DTO_UNREGISTERED_SCHEMA": {
+        "title": "DTO without schema",
+        "description": "Sampled values are IdentifiedDataSerializable objects whose factory id / class id has no schema in the DTO Schema Studio, so they cannot be shown or edited here."
+      }
+    },
+    "recommendations": {
+      "CLUSTER_SINGLE_MEMBER": "Run at least 3 data members in production (2 is the minimum for backups) and keep backup-count ≥ 1. A single member is fine for development only.",
+      "MAP_UNBOUNDED_NO_TTL": "Configure a time-to-live (time-to-live-seconds) or max idle (max-idle-seconds) and an eviction policy with a size limit (eviction: LRU/LFU, max-size-policy PER_NODE or USED_HEAP_PERCENTAGE), or write entries with map.put(key, value, ttl, unit). If the map is reference data that must never expire, ignore this check for it.",
+      "MAP_UNBOUNDED_NO_TTL_CRITICAL": "The map already uses a lot of memory: add a TTL / max idle and a size based eviction policy now, and check whether old entries can be removed. Until then, watch the heap of the members closely.",
+      "MAP_ZOMBIE_WRITE_ONLY": "Find out whether any application still reads this map. If not, stop writing it and destroy or clear it; if it is only read after a restart or by a batch job, give it a TTL so the data does not pile up.",
+      "MAP_BACKUP_DISABLED_OR_BROKEN": "Set backup-count: 1 (or async-backup-count: 1) in the map configuration of the members. Without backups every member failure loses data; only caches whose data can be reloaded at any time may run without them.",
+      "MAP_HIGH_LATENCY": "Check value sizes, use a faster serialization (Compact or IdentifiedDataSerializable instead of Java Serializable), avoid slow MapStore / EntryProcessor logic, add indexes for queries and look for GC pauses or overloaded members. Near caches help read-heavy maps.",
+      "QUEUE_BACKLOG_GROWTH": "Scale up or fix the consumers, set a max-size on the queue to apply back pressure and consider a QueueStore for large backlogs. Make sure consumers acknowledge and remove items.",
+      "DTO_UNREGISTERED_SCHEMA": "Open the DTO Schema Studio and paste the Java source of this class (and of the factory, so its name is known). Once the schema is saved the values are readable and editable immediately.",
+      "DTO_UNREGISTERED_SCHEMA_RESTART": "The factory id of this class is not served by the DTO Schema Studio yet. Add the schema in the Studio and restart the service, or put the jar with the class and its factory into lib/."
     }
   }
 }

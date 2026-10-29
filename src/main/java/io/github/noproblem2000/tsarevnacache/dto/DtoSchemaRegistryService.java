@@ -4,14 +4,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import io.github.noproblem2000.tsarevnacache.api.error.ApiException;
 import io.github.noproblem2000.tsarevnacache.api.error.ErrorCode;
+import io.github.noproblem2000.tsarevnacache.config.JsonFiles;
 import io.github.noproblem2000.tsarevnacache.config.properties.DtoSchemaProperties;
 import io.github.noproblem2000.tsarevnacache.dto.DtoClassSchema.SchemaKey;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -327,19 +326,9 @@ public class DtoSchemaRegistryService {
 
     private void persist(Snapshot content) {
         try {
-            Path directory = file.getParent();
-            if (directory != null) {
-                Files.createDirectories(directory);
-            }
-            Path temp = Files.createTempFile(directory != null ? directory : Path.of("."), "dto-schemas", ".tmp");
-            mapper.writeValue(temp.toFile(), new DtoSchemaRegistryFile(DtoSchemaRegistryFile.CURRENT_FORMAT,
+            JsonFiles.writeAtomically(mapper, file, new DtoSchemaRegistryFile(DtoSchemaRegistryFile.CURRENT_FORMAT,
                     content.factoryId, content.factoryConstants, content.factoryClasses,
-                    List.copyOf(content.schemas.values())));
-            try {
-                Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            } catch (AtomicMoveNotSupportedException e) {
-                Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
-            }
+                    List.copyOf(content.schemas.values())), "dto-schemas");
         } catch (IOException e) {
             throw new UncheckedIOException("Cannot write the DTO schema registry " + file, e);
         }

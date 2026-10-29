@@ -11,6 +11,7 @@ export const queryKeys = {
   mapEntry: (mapName: string, keyRef: string) => ['maps', mapName, 'entry', keyRef] as const,
   other: (typePath: string, name: string) => ['other', typePath, name] as const,
   schemas: ['schemas'] as const,
+  health: ['healthcheck'] as const,
   allMaps: ['maps'] as const,
 };
 
@@ -47,5 +48,14 @@ export function useDtoSchemas() {
     queryKey: queryKeys.schemas,
     queryFn: endpoints.schemas.list,
     staleTime: 30_000,
+  });
+}
+
+/** Latest healthcheck report, refreshed every minute (the backend runs the checks every minute). */
+export function useHealthReport() {
+  return useQuery({
+    queryKey: queryKeys.health,
+    queryFn: endpoints.healthcheck.report,
+    refetchInterval: 60_000,
   });
 }

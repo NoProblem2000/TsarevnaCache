@@ -21,6 +21,7 @@ export type ErrorCode =
   | 'DTO_SCHEMA_INVALID'
   | 'DTO_SCHEMA_NOT_FOUND'
   | 'DTO_SOURCE_NOT_RECOGNIZED'
+  | 'HEALTHCHECK_IGNORE_NOT_FOUND'
   | 'INVALID_CURSOR'
   | 'INVALID_PREDICATE'
   | 'CONFIRMATION_REQUIRED'
@@ -481,4 +482,72 @@ export interface DtoSaveResult {
   schema: DtoClassSchema;
   /** The factory id is not served by the running client yet: restart the service. */
   restartRequired: boolean;
+}
+
+// ---------------------------------------------------------------- healthcheck
+
+export type HealthSeverity = 'CRITICAL' | 'WARNING' | 'INFO';
+export const HEALTH_SEVERITIES: HealthSeverity[] = ['CRITICAL', 'WARNING', 'INFO'];
+
+export type HealthTargetType = 'CLUSTER' | 'IMAP' | 'IQUEUE' | 'DTO_SCHEMA';
+export const HEALTH_TARGET_TYPES: HealthTargetType[] = ['CLUSTER', 'IMAP', 'IQUEUE', 'DTO_SCHEMA'];
+
+export type HealthStatus = 'HEALTHY' | 'DEGRADED' | 'CRITICAL';
+
+export type HealthCheckType =
+  | 'CLUSTER_SINGLE_MEMBER'
+  | 'MAP_UNBOUNDED_NO_TTL'
+  | 'MAP_ZOMBIE_WRITE_ONLY'
+  | 'MAP_BACKUP_DISABLED_OR_BROKEN'
+  | 'MAP_HIGH_LATENCY'
+  | 'QUEUE_BACKLOG_GROWTH'
+  | 'DTO_UNREGISTERED_SCHEMA';
+
+export const HEALTH_CHECK_TYPES: HealthCheckType[] = [
+  'CLUSTER_SINGLE_MEMBER',
+  'MAP_UNBOUNDED_NO_TTL',
+  'MAP_ZOMBIE_WRITE_ONLY',
+  'MAP_BACKUP_DISABLED_OR_BROKEN',
+  'MAP_HIGH_LATENCY',
+  'QUEUE_BACKLOG_GROWTH',
+  'DTO_UNREGISTERED_SCHEMA',
+];
+
+export interface HealthCheckIssue {
+  /** Deterministic key, e.g. `MAP_UNBOUNDED_NO_TTL:user_sessions`. */
+  issueId: string;
+  checkType: HealthCheckType;
+  severity: HealthSeverity;
+  targetType: HealthTargetType;
+  targetName: string;
+  currentValue: string;
+  /** Translation key below `healthcheck.recommendations`. */
+  recommendationCode: string;
+  detectedAt: string;
+  details: Record<string, unknown>;
+}
+
+export interface HealthCheckIgnore {
+  /** Exact issue id, or `CHECK_TYPE:*` for the whole rule. */
+  issueId: string;
+  reason?: string;
+  createdAt?: string;
+  createdBy?: string;
+}
+
+export interface HealthCheckReport {
+  healthScore: number;
+  status: HealthStatus;
+  lastRunTime?: string;
+  durationMillis: number;
+  clusterAvailable: boolean;
+  error?: string;
+  counts: { critical: number; warning: number; info: number; ignored: number };
+  activeIssues: HealthCheckIssue[];
+  ignoredIssues: HealthCheckIssue[];
+  ignores: HealthCheckIgnore[];
+  checkedMaps: number;
+  sampledMaps: number;
+  /** Period of the background runs, 0 when they are disabled. */
+  intervalMillis: number;
 }

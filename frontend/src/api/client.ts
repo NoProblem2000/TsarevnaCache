@@ -132,6 +132,17 @@ export async function request<T>(method: string, path: string, options: RequestO
 export const api = {
   get: <T>(path: string, query?: QueryParams, silentUnauthorized = false) =>
     request<T>('GET', path, { query, silentUnauthorized }),
+  /** Plain text response (e.g. the Prometheus exposition format). */
+  getText: async (path: string): Promise<string> => {
+    const response = await fetch(path, { credentials: 'same-origin', headers: { Accept: 'text/plain' } });
+    if (!response.ok) {
+      if (response.status === 401) {
+        window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));
+      }
+      throw await toApiError(response);
+    }
+    return response.text();
+  },
   post: <T>(path: string, body?: unknown, query?: QueryParams, silentUnauthorized = false) =>
     request<T>('POST', path, { body, query, silentUnauthorized }),
   delete: <T>(path: string, query?: QueryParams) => request<T>('DELETE', path, { query }),

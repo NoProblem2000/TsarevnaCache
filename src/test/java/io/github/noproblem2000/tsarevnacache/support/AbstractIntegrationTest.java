@@ -20,6 +20,9 @@ public abstract class AbstractIntegrationTest {
     /** DTO schema registry of the test application (never the developer's {@code ./config}). */
     protected static final Path DTO_SCHEMAS_FILE = tempDirectory().resolve("dto-schemas.json");
 
+    /** Healthcheck ignore list of the test application. */
+    protected static final Path HEALTHCHECK_IGNORES_FILE = DTO_SCHEMAS_FILE.resolveSibling("healthcheck-ignores.json");
+
     private static Path tempDirectory() {
         try {
             return Files.createTempDirectory("tsarevna-schemas");
@@ -38,6 +41,9 @@ public abstract class AbstractIntegrationTest {
         registry.add("admin.security.username", () -> ADMIN_USER);
         registry.add("admin.security.password", () -> ADMIN_PASSWORD);
         registry.add("admin.dto-schemas.file", () -> DTO_SCHEMAS_FILE.toString());
+        registry.add("admin.healthcheck.ignores-file", () -> HEALTHCHECK_IGNORES_FILE.toString());
+        // runs are triggered by the tests themselves
+        registry.add("admin.healthcheck.enabled", () -> "false");
     }
 
     protected EmbeddedCluster cluster() {

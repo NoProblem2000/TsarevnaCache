@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { useClusterOverview } from '../../api/queries';
 import { useAuth } from '../../auth/AuthContext';
+import { HealthBadge } from '../../features/health/HealthBadge';
 import { Logo } from '../ui/Logo';
 import { LanguageSwitch } from './LanguageSwitch';
 
@@ -52,6 +53,7 @@ export function TopBar() {
           <span className={`h-2 w-2 rounded-full ${dotStyles}`} aria-hidden />
           {t(`topBar.${status}`)}
         </span>
+        {status === 'online' && <HealthBadge />}
         {status === 'online' && overview.data && (
           <span className="hidden text-xs text-gk-muted lg:inline">
             {t('topBar.members', { count: overview.data.members.length })}

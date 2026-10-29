@@ -42,6 +42,8 @@ public enum ErrorCode {
     DTO_SCHEMA_NOT_FOUND(HttpStatus.NOT_FOUND),
     /** The pasted Java source does not contain what is needed (class, factory, readData/writeData). */
     DTO_SOURCE_NOT_RECOGNIZED(HttpStatus.BAD_REQUEST),
+    /** The issue id is not in the healthcheck ignore list. */
+    HEALTHCHECK_IGNORE_NOT_FOUND(HttpStatus.NOT_FOUND),
     /** A paging cursor is malformed or does not belong to this cluster. */
     INVALID_CURSOR(HttpStatus.BAD_REQUEST),
     /** The SQL predicate cannot be parsed or evaluated. */

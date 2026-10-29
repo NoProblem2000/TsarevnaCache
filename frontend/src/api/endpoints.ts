@@ -11,12 +11,16 @@ import type {
   EntryPageDTO,
   EntryQuery,
   FactoryParseResult,
+  HealthCheckReport,
   KeySpec,
   MapStatsDTO,
   OtherStructureDTO,
   PutEntryRequest,
   StructuresDTO,
 } from './types';
+
+/** Prometheus exporter of the healthcheck (text format 0.0.4). */
+export const PROMETHEUS_PATH = '/api/healthcheck/prometheus';
 
 const mapPath = (mapName: string) => `/api/maps/${encodeURIComponent(mapName)}`;
 const otherPath = (typePath: string, name: string) =>
@@ -58,6 +62,14 @@ export const endpoints = {
       api.delete<void>(`${otherPath(typePath, name)}/item`, { ref, keyRef }),
     clear: (typePath: string, name: string, confirm: string) =>
       api.delete<void>(`${otherPath(typePath, name)}/clear`, { confirm }),
+  },
+  healthcheck: {
+    report: () => api.get<HealthCheckReport>('/api/healthcheck/report'),
+    run: () => api.post<HealthCheckReport>('/api/healthcheck/run'),
+    ignore: (issueId: string, reason: string) => api.post<HealthCheckReport>('/api/healthcheck/ignore', { issueId, reason }),
+    // query variant: issue ids may contain characters that are rejected inside a path
+    unignore: (issueId: string) => api.delete<HealthCheckReport>('/api/healthcheck/ignore', { issueId }),
+    prometheus: () => api.getText(PROMETHEUS_PATH),
   },
   schemas: {
     list: () => api.get<DtoRegistryView>('/api/schemas'),

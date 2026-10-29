@@ -28,6 +28,7 @@ function javaEnumConstants(relativePath: string, constantPattern: RegExp): strin
 
 const BACKEND_ERROR_CODES = javaEnumConstants('api/error/ErrorCode.java', /^\s{4}([A-Z_]+)\(HttpStatus/gm);
 const DESERIALIZATION_CODES = javaEnumConstants('api/dto/DeserializationErrorCode.java', /^\s{4}([A-Z_]+)\s*[,;]?\s*$/gm);
+const HEALTH_CHECK_TYPES = javaEnumConstants('healthcheck/HealthCheckType.java', /^\s{4}([A-Z_]+)\(HealthTargetType/gm);
 
 describe('locales', () => {
   it('English and Russian define the same keys', () => {
@@ -50,6 +51,21 @@ describe('locales', () => {
     for (const code of DESERIALIZATION_CODES) {
       expect((en as Tree & { deserialization: Record<string, string> }).deserialization[code], code).toBeTruthy();
       expect((ru as Tree & { deserialization: Record<string, string> }).deserialization[code], code).toBeTruthy();
+    }
+  });
+
+  it('every healthcheck rule has a title, description and recommendation', () => {
+    expect(HEALTH_CHECK_TYPES.length).toBe(7);
+    type Health = { checks: Record<string, { title: string; description: string }>; recommendations: Record<string, string> };
+    for (const locale of [en, ru] as unknown as { health: Health }[]) {
+      for (const type of HEALTH_CHECK_TYPES) {
+        expect(locale.health.checks[type]?.title, type).toBeTruthy();
+        expect(locale.health.checks[type]?.description, type).toBeTruthy();
+        expect(locale.health.recommendations[type], type).toBeTruthy();
+      }
+      // variants emitted by HealthCheckRules
+      expect(locale.health.recommendations.MAP_UNBOUNDED_NO_TTL_CRITICAL).toBeTruthy();
+      expect(locale.health.recommendations.DTO_UNREGISTERED_SCHEMA_RESTART).toBeTruthy();
     }
   });
 

@@ -90,6 +90,9 @@ admin:
       dynamic-factory-ids: [1]
       # factoryId -> fully qualified PortableFactory class name.
       portable-factories: {}
+      # Register DataSerializableFactory / PortableFactory classes found in lib/ and
+      # dto-classpath by their "static int FACTORY_ID" constant (configured ones win).
+      auto-register-factories: true
       portable-version: 0
       # Custom StreamSerializer / ByteArraySerializer registrations.
       custom-serializers: []

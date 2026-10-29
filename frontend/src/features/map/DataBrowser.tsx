@@ -11,6 +11,7 @@ import { ErrorMessage } from '../../components/ui/ErrorMessage';
 import { CenteredSpinner } from '../../components/ui/Spinner';
 import { useToast } from '../../components/ui/Toast';
 import { EntryTable } from './EntryTable';
+import { MissingSchemasBanner } from './MissingSchemasBanner';
 import { Pagination } from './Pagination';
 import { SearchBar, type AppliedSearch } from './SearchBar';
 import { useInvalidateMapData } from './useInvalidateMapData';
@@ -114,6 +115,8 @@ export function DataBrowser({ mapName, toolbarActions, onOpenEntry }: DataBrowse
           </button>
         </div>
       </div>
+
+      {data && !entries.isError && <MissingSchemasBanner entries={data.entries} />}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {entries.isPending && <CenteredSpinner />}

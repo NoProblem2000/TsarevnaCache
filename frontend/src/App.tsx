@@ -6,6 +6,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { MapPage } from './pages/MapPage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { SchemasPage } from './pages/SchemasPage';
 import { StructurePage } from './pages/StructurePage';
 
 /** Routes; everything except the login screen requires a session. */
@@ -25,6 +26,7 @@ export function App() {
           <Route index element={<DashboardPage />} />
           <Route path="maps/:mapName" element={<MapPage />} />
           <Route path="structures/:type/:name" element={<StructurePage />} />
+          <Route path="schemas" element={<SchemasPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>

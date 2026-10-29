@@ -2,9 +2,15 @@ import { api } from './client';
 import type {
   AuthUser,
   ClusterOverviewDTO,
+  DtoClassSchema,
+  DtoParseResult,
+  DtoRegistryView,
+  DtoSaveResult,
+  DtoSchemaRegistryFile,
   EntryDTO,
   EntryPageDTO,
   EntryQuery,
+  FactoryParseResult,
   KeySpec,
   MapStatsDTO,
   OtherStructureDTO,
@@ -52,5 +58,16 @@ export const endpoints = {
       api.delete<void>(`${otherPath(typePath, name)}/item`, { ref, keyRef }),
     clear: (typePath: string, name: string, confirm: string) =>
       api.delete<void>(`${otherPath(typePath, name)}/clear`, { confirm }),
+  },
+  schemas: {
+    list: () => api.get<DtoRegistryView>('/api/schemas'),
+    parseFactory: (source: string, save = true) =>
+      api.post<FactoryParseResult>('/api/schemas/parse-factory', { source }, { save }),
+    parseDto: (source: string) => api.post<DtoParseResult>('/api/schemas/parse-dto', { source }),
+    save: (schema: DtoClassSchema) => api.post<DtoSaveResult>('/api/schemas', schema),
+    remove: (factoryId: number, classId: number) => api.delete<void>(`/api/schemas/${factoryId}/${classId}`),
+    exportFile: () => api.get<DtoSchemaRegistryFile>('/api/schemas/export'),
+    importFile: (content: DtoSchemaRegistryFile, mode: 'replace' | 'merge') =>
+      api.post<DtoRegistryView>('/api/schemas/import', content, { mode }),
   },
 };

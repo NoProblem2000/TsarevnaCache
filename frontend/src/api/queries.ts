@@ -10,6 +10,8 @@ export const queryKeys = {
   mapEntries: (mapName: string) => ['maps', mapName, 'entries'] as const,
   mapEntry: (mapName: string, keyRef: string) => ['maps', mapName, 'entry', keyRef] as const,
   other: (typePath: string, name: string) => ['other', typePath, name] as const,
+  schemas: ['schemas'] as const,
+  allMaps: ['maps'] as const,
 };
 
 /** Cluster overview, refreshed every 10 seconds (drives the Online/Offline indicator). */
@@ -36,5 +38,14 @@ export function useStructures(includeInternal: boolean) {
     queryKey: queryKeys.structures(includeInternal),
     queryFn: () => endpoints.cluster.structures(includeInternal),
     refetchInterval: 15_000,
+  });
+}
+
+/** DTO schema registry (DTO Schema Studio, sidebar counter, Put Entry DTO picker). */
+export function useDtoSchemas() {
+  return useQuery({
+    queryKey: queryKeys.schemas,
+    queryFn: endpoints.schemas.list,
+    staleTime: 30_000,
   });
 }

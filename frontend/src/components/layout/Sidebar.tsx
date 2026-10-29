@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, LayoutDashboard, RefreshCw, Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileCode2, LayoutDashboard, RefreshCw, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { NavLink } from 'react-router-dom';
-import { useStructures } from '../../api/queries';
+import { useDtoSchemas, useStructures } from '../../api/queries';
 import { STRUCTURE_TYPES, type StructureDTO, type StructureType } from '../../api/types';
 import { formatBytes, formatNumber } from '../../lib/format';
 import { ErrorMessage } from '../ui/ErrorMessage';
@@ -19,6 +19,7 @@ export function Sidebar() {
   const [showInternal, setShowInternal] = useState(readShowInternal);
   const [collapsed, setCollapsed] = useState<Partial<Record<StructureType, boolean>>>({});
   const structures = useStructures(showInternal);
+  const schemas = useDtoSchemas();
 
   const groups = useMemo(() => {
     const needle = filter.trim().toLowerCase();
@@ -53,6 +54,23 @@ export function Sidebar() {
         >
           <LayoutDashboard className="h-4 w-4" aria-hidden />
           {t('sidebar.overview')}
+        </NavLink>
+        <NavLink
+          to="/schemas"
+          className={({ isActive }) =>
+            `mt-0.5 flex items-center gap-2 rounded-md px-2.5 py-2 transition-colors ${
+              isActive ? 'bg-gk-cyan/10 text-gk-cyan' : 'text-gk-text hover:bg-gk-hover'
+            }`
+          }
+          title={t('sidebar.schemasHint')}
+        >
+          <FileCode2 className="h-4 w-4" aria-hidden />
+          <span className="flex-1">{t('sidebar.schemas')}</span>
+          {schemas.data && (
+            <span className="gk-badge bg-gk-purple/20 text-gk-purple" title={t('sidebar.schemasCount', { count: schemas.data.schemas.length })}>
+              {schemas.data.schemas.length}
+            </span>
+          )}
         </NavLink>
       </nav>
 

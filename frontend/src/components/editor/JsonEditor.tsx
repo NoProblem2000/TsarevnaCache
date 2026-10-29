@@ -40,7 +40,9 @@ const gitKrakenHighlight = HighlightStyle.define([
   { tag: tags.invalid, color: '#E74C3C' },
 ]);
 
-const extensions = [json(), gitKrakenTheme, syntaxHighlighting(gitKrakenHighlight), EditorView.lineWrapping];
+const jsonExtensions = [json(), gitKrakenTheme, syntaxHighlighting(gitKrakenHighlight), EditorView.lineWrapping];
+/** Plain code (pasted Java sources): same chrome, no JSON parsing. */
+const textExtensions = [gitKrakenTheme];
 
 interface JsonEditorProps {
   value: string;
@@ -50,10 +52,22 @@ interface JsonEditorProps {
   height?: string;
   minHeight?: string;
   ariaLabel?: string;
+  /** `text` shows any code (e.g. Java) without JSON highlighting. */
+  language?: 'json' | 'text';
+  placeholder?: string;
 }
 
-/** CodeMirror JSON editor/viewer with syntax highlighting, folding and bracket matching. */
-export function JsonEditor({ value, onChange, readOnly = false, height, minHeight = '120px', ariaLabel }: JsonEditorProps) {
+/** CodeMirror JSON editor/viewer with syntax highlighting, folding and bracket matching (or plain code). */
+export function JsonEditor({
+  value,
+  onChange,
+  readOnly = false,
+  height,
+  minHeight = '120px',
+  ariaLabel,
+  language = 'json',
+  placeholder,
+}: JsonEditorProps) {
   return (
     <CodeMirror
       value={value}
@@ -63,7 +77,8 @@ export function JsonEditor({ value, onChange, readOnly = false, height, minHeigh
       height={height}
       minHeight={minHeight}
       theme="none"
-      extensions={extensions}
+      extensions={language === 'json' ? jsonExtensions : textExtensions}
+      placeholder={placeholder}
       aria-label={ariaLabel}
       basicSetup={{
         lineNumbers: true,

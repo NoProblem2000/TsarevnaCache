@@ -22,7 +22,9 @@ import io.github.noproblem2000.tsarevnacache.config.properties.HazelcastClientPr
 import io.github.noproblem2000.tsarevnacache.dto.DtoSchemaRegistryService;
 import io.github.noproblem2000.tsarevnacache.dto.DynamicDataSerializableFactory;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
@@ -143,12 +145,31 @@ public class HazelcastClientConfig {
             }
         }
 
-        // Dynamic DTO factories (schemas from config/dto-schemas.json); a real factory configured for
-        // the same id becomes their fallback instead of being registered twice.
+        // factories found in lib/ (by FACTORY_ID) plus the configured ones, which win
+        FactoryDiscovery.Result discovered = properties.isAutoRegisterFactories()
+                ? FactoryDiscovery.discover(classLoader) : FactoryDiscovery.Result.empty();
+        Map<Integer, String> dataSerializableFactories = new TreeMap<>(discovered.dataSerializable());
+        properties.getDataSerializableFactories().forEach((id, name) -> dataSerializableFactories.put(id, name.trim()));
+        Map<Integer, String> portableFactories = new TreeMap<>(discovered.portable());
+        properties.getPortableFactories().forEach((id, name) -> portableFactories.put(id, name.trim()));
+        discovered.dataSerializable().forEach((id, name) -> {
+            if (name.equals(dataSerializableFactories.get(id))) {
+                log.info("Discovered DataSerializableFactory {} -> {} in the DTO libraries", id, name);
+            }
+        });
+        discovered.portable().forEach((id, name) -> {
+            if (name.equals(portableFactories.get(id))) {
+                log.info("Discovered PortableFactory {} -> {} in the DTO libraries", id, name);
+            }
+        });
+        dtoSchemaRegistry.setLibraryFactories(dataSerializableFactories);
+
+        // Dynamic DTO factories (schemas from config/dto-schemas.json); a real factory for the same id
+        // becomes their fallback instead of being registered twice.
         Set<Integer> dynamicIds = new TreeSet<>(properties.getDynamicFactoryIds());
         dynamicIds.addAll(dtoSchemaRegistry.factoryIds());
         for (int factoryId : dynamicIds) {
-            String delegateClass = properties.getDataSerializableFactories().get(factoryId);
+            String delegateClass = dataSerializableFactories.get(factoryId);
             DataSerializableFactory delegate = delegateClass == null || delegateClass.isBlank() ? null
                     : instantiate(classLoader, delegateClass, DataSerializableFactory.class);
             serialization.addDataSerializableFactory(factoryId,
@@ -157,14 +178,14 @@ public class HazelcastClientConfig {
         }
         dtoSchemaRegistry.setActiveFactoryIds(dynamicIds);
 
-        properties.getDataSerializableFactories().forEach((factoryId, className) -> {
+        dataSerializableFactories.forEach((factoryId, className) -> {
             if (!dynamicIds.contains(factoryId)) {
-                serialization.addDataSerializableFactoryClass(factoryId, className.trim());
+                serialization.addDataSerializableFactoryClass(factoryId, className);
                 log.info("Registered DataSerializableFactory {} -> {}", factoryId, className);
             }
         });
-        properties.getPortableFactories().forEach((factoryId, className) -> {
-            serialization.addPortableFactoryClass(factoryId, className.trim());
+        portableFactories.forEach((factoryId, className) -> {
+            serialization.addPortableFactoryClass(factoryId, className);
             log.info("Registered PortableFactory {} -> {}", factoryId, className);
         });
 

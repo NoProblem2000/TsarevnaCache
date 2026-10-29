@@ -63,7 +63,11 @@
     "showInternal": "Show internal objects",
     "entriesTooltip": "{{count}} entries",
     "memoryTooltip": "Owned memory: {{size}}",
-    "loadFailed": "Could not load structures"
+    "loadFailed": "Could not load structures",
+    "schemas": "DTO Schemas",
+    "schemasHint": "DTO Schema Studio: IdentifiedDataSerializable DTOs without jars",
+    "schemasCount_one": "{{count}} registered DTO",
+    "schemasCount_other": "{{count}} registered DTOs"
   },
   "types": {
     "plural": {
@@ -188,7 +192,9 @@
     "cleared": "Map “{{name}}” was cleared",
     "deleted": "Entry deleted",
     "saved": "Entry saved",
-    "refresh": "Reload page"
+    "refresh": "Reload page",
+    "missingSchemas_one": "{{count}} key or value on this page uses an IdentifiedDataSerializable class without a schema.",
+    "missingSchemas_other": "{{count}} keys or values on this page use IdentifiedDataSerializable classes without a schema."
   },
   "inspector": {
     "title": "Entry Inspector",
@@ -233,7 +239,10 @@
     "reason": "Reason",
     "headerMetadata": "Binary header",
     "entryCost": "Entry cost",
-    "copyKeyRef": "Copy key reference"
+    "copyKeyRef": "Copy key reference",
+    "dtoSchemaHint": "Paste the Java source of this class into the DTO Schema Studio and it becomes readable and editable right away.",
+    "configureDtoSchema": "Configure DTO Schema (Factory ID: {{factoryId}}, Class ID: {{classId}})",
+    "openSchema": "Schema {{factoryId}}/{{classId}}"
   },
   "putModal": {
     "title": "Put Entry",
@@ -254,7 +263,15 @@
     "classHint": "The JSON is bound to this class (from the admin or DTO classpath) before the put.",
     "compactHint": "Stored as a Compact record; the schema of the inspected value is reused.",
     "valuePlaceholder": "Value…",
-    "jsonPlaceholder": "{ \"name\": \"value\" }"
+    "jsonPlaceholder": "{ \"name\": \"value\" }",
+    "dtoClass": "Registered DTO",
+    "pickDto": "Choose a DTO…",
+    "noDtoSchemas": "No DTO schemas registered",
+    "noDtoSchemasHint": "Register your IdentifiedDataSerializable classes first.",
+    "openStudio": "Open DTO Schema Studio",
+    "generateTemplate": "Generate JSON Template",
+    "generateTemplateHint": "Replaces the editor content with every field of the DTO (nested DTOs included)",
+    "dtoHint": "Written with the registered schema, byte-identical to the owning application. Nested DTOs carry \"@classId\"; dates are ISO-8601, BigDecimals and large longs are strings."
   },
   "clearModal": {
     "title": "Clear map",
@@ -359,7 +376,7 @@
     "JSON": "JSON (HazelcastJsonValue)",
     "CLASS": "Custom class",
     "COMPACT": "Compact record",
-    "IDENTIFIED_DTO": "Schema DTO (IdentifiedDataSerializable)"
+    "IDENTIFIED_DTO": "Registered DTO (IdentifiedDataSerializable)"
   },
   "errors": {
     "AUTH_REQUIRED": "Please sign in to continue.",
@@ -404,7 +421,7 @@
     "CUSTOM_SERIALIZER_MISSING": "The object was written by a custom serializer that is not registered.",
     "COMPACT_SCHEMA_UNAVAILABLE": "The Compact schema could not be fetched from the cluster.",
     "DESERIALIZATION_ERROR": "The object could not be deserialized.",
-    "DTO_SCHEMA_MISSING": "No DTO schema is registered for this factoryId/classId. Add it to the schema registry."
+    "DTO_SCHEMA_MISSING": "No DTO schema is registered for this factoryId/classId. Add it in the DTO Schema Studio."
   },
   "notFound": {
     "title": "Page not found",
@@ -416,5 +433,131 @@
     "hours": "{{count}}h",
     "minutes": "{{count}}m",
     "seconds": "{{count}}s"
+  },
+  "schemas": {
+    "title": "DTO Schema Studio",
+    "subtitle": "Read and edit IdentifiedDataSerializable DTOs from their Java source, no jars needed",
+    "count_one": "{{count}} DTO",
+    "count_other": "{{count}} DTOs",
+    "smartPaste": "Smart Java Paste",
+    "newSchema": "New Schema",
+    "exportJson": "Export JSON",
+    "importJson": "Import JSON",
+    "exportFailed": "The export failed",
+    "deleted": "Schema {{name}} deleted",
+    "deleteTitle": "Delete DTO schema",
+    "deleteConfirm": "Delete the schema of {{name}} (factory {{factoryId}}, class {{classId}})? Values of this class become unreadable until it is added again.",
+    "pendingRestart": "Schemas of factory id(s) {{ids}} are saved but not readable yet: the dynamic factory for a new factory id is registered on the next start of the service.",
+    "filterPlaceholder": "Filter by class, class id or field…",
+    "noMatches": "No schema matches “{{filter}}”",
+    "factoryId": "Factory ID",
+    "classId": "Class ID",
+    "className": "Class Name",
+    "factory": {
+      "title": "Factory",
+      "parse": "Parse Factory",
+      "active": "Active",
+      "empty": "No factory parsed yet. Paste your DataSerializableFactory.java to map constants to class ids.",
+      "hasSchema": "Schema",
+      "addSchema": "Add",
+      "noClass": "no class"
+    },
+    "storage": {
+      "title": "Storage & factories",
+      "file": "Registry file",
+      "activeFactories": "Dynamic factory ids served now",
+      "libraryFactories": "Factories from lib/ and configuration",
+      "noLibraryFactories": "None",
+      "fallback": "fallback for class ids without a schema",
+      "shareHint": "Commit or share dto-schemas.json (Export / Import) so the whole team reads the same DTOs."
+    },
+    "empty": {
+      "title": "No DTO schemas yet",
+      "text": "The admin service reads IdentifiedDataSerializable values once it knows the order and type of their fields. Three steps:",
+      "step1": "Parse the factory",
+      "step1Text": "Paste DataSerializableFactory.java: FACTORY_ID and every class id (SOMEDTO = 1) are stored.",
+      "step2": "Analyze each DTO",
+      "step2Text": "Paste SomeDTO.java: the readData calls become an ordered field list you can review.",
+      "step3": "Save and browse",
+      "step3Text": "Saved schemas apply immediately: open a map and its DTOs are shown and edited as JSON."
+    },
+    "card": {
+      "ids": "Factory ID: {{factoryId}} | Class ID: {{classId}}",
+      "fieldCount_one": "{{count}} field",
+      "fieldCount_other": "{{count}} fields",
+      "pending": "Restart needed",
+      "pendingHint": "This factory id is not served by the running Hazelcast client yet; restart the service.",
+      "nestedMissing": "No schema for {{name}} yet",
+      "noFields": "No fields",
+      "edit": "Edit Schema",
+      "export": "Export JSON"
+    },
+    "editor": {
+      "newTitle": "New DTO schema",
+      "editTitle": "Edit DTO schema",
+      "save": "Save Schema",
+      "saving": "Saving…",
+      "saved": "Schema {{name}} saved: its values are readable now",
+      "savedRestart": "Schema {{name}} saved; restart the service to read factory {{factoryId}}",
+      "parserWarnings": "The parser needs your review:",
+      "pickConstant": "Factory constant…",
+      "noConstants": "No factory constants",
+      "idsInvalid": "Factory ID and Class ID must be integers, the class name a Java identifier.",
+      "fields": "Fields in byte order",
+      "orderHint": "Same order as the calls in readData: the order decides how the bytes are read.",
+      "fieldName": "Field Name",
+      "serializationType": "Serialization Type",
+      "nestedClass": "Nested DTO Class",
+      "nestedHint": "DTO class of the object / list elements (optional)",
+      "nestedDisabled": "Only NullableObject and NullableList fields contain DTOs",
+      "noNested": "Any / not a DTO",
+      "helperTypes": "SerializationUtils helpers",
+      "rawTypes": "Raw ObjectDataInput calls",
+      "duplicateField": "Field “{{name}}” exists already",
+      "invalidField": "Java identifier required (not starting with @)",
+      "moveUp": "Move Up",
+      "moveDown": "Move Down",
+      "removeField": "Remove field",
+      "addField": "Add Field",
+      "noFields": "No fields: add them in the order of readData.",
+      "showPreview": "Preview JSON",
+      "hidePreview": "Hide preview",
+      "previewTitle": "JSON template of this schema",
+      "targetMismatch": "The pasted class has class id {{parsed}}, the missing value has {{expected}}: check that this is the right class."
+    },
+    "paste": {
+      "title": "Smart Java Paste",
+      "mode": "Source type",
+      "modeFactory": "DataSerializableFactory.java",
+      "modeDto": "DTO class (SomeDTO.java)",
+      "openFile": "Open .java file",
+      "factoryHint": "Paste your factory: FACTORY_ID, all int constants and the class created for each id (switch, case/return, arrays or map.put) are extracted and stored.",
+      "dtoHint": "Paste a DTO with readData/writeData: the SerializationUtils and ObjectDataInput calls become the field list of the schema editor.",
+      "targetHint": "Missing in the cluster: {{name}} (Factory ID {{factoryId}}, Class ID {{classId}}). Paste its Java source.",
+      "targetHintUnknown": "Missing in the cluster: the class with Factory ID {{factoryId}}, Class ID {{classId}}. Paste its Java source (or parse the factory first to see its name).",
+      "parseFactory": "Parse Factory IDs",
+      "analyze": "Analyze Java Code",
+      "parsing": "Analyzing…",
+      "manual": "Define fields manually",
+      "factorySaved_one": "Factory {{factoryId}}: {{count}} constant saved",
+      "factorySaved_other": "Factory {{factoryId}}: {{count}} constants saved",
+      "factoryResult_one": "FACTORY_ID = {{factoryId}} · {{count}} constant",
+      "factoryResult_other": "FACTORY_ID = {{factoryId}} · {{count}} constants"
+    },
+    "import": {
+      "title": "Import dto-schemas.json",
+      "notRegistry": "This is not a dto-schemas.json file (the \"schemas\" list is missing).",
+      "summary_one": "{{count}} schema, {{constants}} factory constants (factory id {{factoryId}}).",
+      "summary_other": "{{count}} schemas, {{constants}} factory constants (factory id {{factoryId}}).",
+      "mode": "Import mode",
+      "merge": "Merge",
+      "replace": "Replace all",
+      "mergeHint": "Adds the schemas and factory entries of the file; existing schemas with the same ids are overwritten.",
+      "replaceHint": "Replaces the whole registry with the file. Schemas that are not in the file are removed.",
+      "submit": "Import",
+      "importing": "Importing…",
+      "done_one": "Imported: {{count}} schema registered",
+      "done_other": "Imported: {{count}} schemas registered"
+    }
   }
 }

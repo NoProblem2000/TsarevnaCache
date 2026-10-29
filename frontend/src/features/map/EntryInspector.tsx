@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, Lock, Save, Trash2 } from 'lucide-react';
+import { Copy, FileCode2, Lock, Save, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import { endpoints } from '../../api/endpoints';
 import { queryKeys } from '../../api/queries';
 import type { EntryDTO, InspectedValue, PutEntryRequest } from '../../api/types';
@@ -14,6 +15,7 @@ import { CenteredSpinner } from '../../components/ui/Spinner';
 import { useToast } from '../../components/ui/Toast';
 import { TypeBadge } from '../../components/ui/ValueBadges';
 import { formatBytes, formatDateTime, formatDuration, formatNumber } from '../../lib/format';
+import { editSchemaRoute } from '../schemas/schemaLinks';
 import { UnresolvedPanel } from './UnresolvedPanel';
 import { useInvalidateMapData } from './useInvalidateMapData';
 import { editorTextToValue, initialEditorText, isJsonEdited, parseTtl } from './valueEditing';
@@ -297,6 +299,15 @@ function TypeInfo({ value }: { value: InspectedValue }) {
         <span className="text-gk-muted">
           {t('inspector.dataType')}: <span className="text-gk-text">{t(`dataTypes.${value.dataType}`)}</span>
         </span>
+      )}
+      {value.kind === 'IDENTIFIED_DTO' && numberMeta(value, 'factoryId') !== undefined && numberMeta(value, 'classId') !== undefined && (
+        <Link
+          to={editSchemaRoute(numberMeta(value, 'factoryId') as number, numberMeta(value, 'classId') as number)}
+          className="inline-flex items-center gap-1 text-gk-cyan hover:underline"
+        >
+          <FileCode2 className="h-3 w-3" aria-hidden />
+          {t('inspector.openSchema', { factoryId: numberMeta(value, 'factoryId'), classId: numberMeta(value, 'classId') })}
+        </Link>
       )}
     </div>
   );

@@ -1,12 +1,15 @@
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, FileCode2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import type { UnresolvedObjectDTO } from '../../api/types';
 import { formatBytes } from '../../lib/format';
+import { configureSchemaRoute, missingDtoTarget } from '../schemas/schemaLinks';
 
 /** Explains why a key or value could not be deserialized and what to add to the classpath. */
 export function UnresolvedPanel({ unresolved, isKey = false }: { unresolved: UnresolvedObjectDTO; isKey?: boolean }) {
   const { t } = useTranslation();
   const metadata = Object.entries(unresolved.metadata ?? {});
+  const dtoTarget = missingDtoTarget(unresolved);
   return (
     <div className="space-y-3 rounded-lg border border-gk-warning/40 bg-gk-warning/5 p-4">
       <div className="flex items-start gap-2">
@@ -54,7 +57,17 @@ export function UnresolvedPanel({ unresolved, isKey = false }: { unresolved: Unr
           </>
         )}
       </dl>
-      <p className="text-xs text-gk-muted">{t('inspector.unresolvedHint')}</p>
+      {dtoTarget ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-gk-cyan/30 bg-gk-cyan/5 p-3">
+          <p className="min-w-0 flex-1 text-xs text-gk-text">{t('inspector.dtoSchemaHint')}</p>
+          <Link to={configureSchemaRoute(dtoTarget)} className="gk-btn-primary px-3 py-1.5 text-xs">
+            <FileCode2 className="h-3.5 w-3.5" aria-hidden />
+            {t('inspector.configureDtoSchema', { factoryId: dtoTarget.factoryId, classId: dtoTarget.classId })}
+          </Link>
+        </div>
+      ) : (
+        <p className="text-xs text-gk-muted">{t('inspector.unresolvedHint')}</p>
+      )}
     </div>
   );
 }

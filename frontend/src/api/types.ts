@@ -70,7 +70,6 @@ export type DataType =
   | 'JSON'
   | 'CLASS'
   | 'COMPACT'
-  | 'IDENTIFIED_DTO'
   | 'IDENTIFIED_DTO';
 
 export const DATA_TYPES: DataType[] = [
@@ -400,4 +399,86 @@ export interface OtherStructureDTO {
   limit: number;
   itemsAvailable: boolean;
   items: OtherStructureItem[];
+}
+
+// ---------------------------------------------------------------- dynamic DTO schemas
+
+/** Serialization helpers of a DTO field, in the order of `DtoFieldType.java`. */
+export const DTO_FIELD_TYPES = [
+  'NULLABLE_LONG',
+  'NULLABLE_STRING',
+  'NULLABLE_DATE',
+  'NULLABLE_OBJECT',
+  'NULLABLE_BOOLEAN',
+  'NULLABLE_INT',
+  'NULLABLE_DOUBLE',
+  'NULLABLE_BIG_DECIMAL',
+  'NULLABLE_LIST',
+  'NULLABLE_LONG_LIST',
+  'NULLABLE_INTEGER_LIST',
+  'RAW_INT',
+  'RAW_LONG',
+  'RAW_BOOLEAN',
+  'RAW_STRING',
+  'RAW_BYTE_ARRAY',
+] as const;
+
+export type DtoFieldType = (typeof DTO_FIELD_TYPES)[number];
+
+export interface DtoFieldSchema {
+  order: number;
+  fieldName: string;
+  fieldType: DtoFieldType;
+  nestedClassId?: number | null;
+  nestedClassName?: string | null;
+}
+
+export interface DtoClassSchema {
+  factoryId: number;
+  classId: number;
+  className: string;
+  fields: DtoFieldSchema[];
+  rawJavaSource?: string | null;
+}
+
+export interface DtoRegistryView {
+  factoryId: number;
+  factoryConstants: Record<string, number>;
+  factoryClasses: Record<string, number>;
+  activeFactoryIds: number[];
+  pendingFactoryIds: number[];
+  /** Factory id → DataSerializableFactory class of the client (configured or found in lib/). */
+  libraryFactories: Record<string, string>;
+  file: string;
+  schemas: DtoClassSchema[];
+}
+
+/** Content of `dto-schemas.json` (export / import). */
+export interface DtoSchemaRegistryFile {
+  formatVersion?: number;
+  factoryId?: number;
+  factoryConstants?: Record<string, number>;
+  factoryClasses?: Record<string, number>;
+  schemas: DtoClassSchema[];
+}
+
+export interface FactoryParseResult {
+  factoryId: number;
+  constants: Record<string, number>;
+  classes: Record<string, number>;
+  warnings: string[];
+}
+
+export interface DtoParseResult {
+  schema: DtoClassSchema;
+  /** Method the field list was taken from. */
+  source: 'readData' | 'writeData';
+  complete: boolean;
+  warnings: string[];
+}
+
+export interface DtoSaveResult {
+  schema: DtoClassSchema;
+  /** The factory id is not served by the running client yet: restart the service. */
+  restartRequired: boolean;
 }

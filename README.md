@@ -25,7 +25,7 @@ never seen.
 - [Features](#features)
 - [Architecture](#architecture)
 - [How custom DTO deserialization works](#how-custom-dto-deserialization-works)
-- [Dynamic IdentifiedDataSerializable DTOs (no jars)](#dynamic-identifieddataserializable-dtos-no-jars)
+- [Working with Custom DTOs (Two Approaches)](#working-with-custom-dtos-two-approaches)
 - [Getting started](#getting-started)
 - [Configuration](#configuration)
 - [REST API](#rest-api)
@@ -77,6 +77,9 @@ TsarevnaCache answers them from a single self-contained jar:
 - *Put Entry* dialog with key and value types (`STRING`, numbers, `BOOLEAN`, `UUID`, `BIG_DECIMAL`,
   `JSON` → `HazelcastJsonValue`, `CLASS` → your DTO), TTL in seconds.
 - Editing **Compact records without their Java class** (the schema of the stored value is reused).
+- **DTO Schema Studio**: paste `DataSerializableFactory.java` and your `IdentifiedDataSerializable`
+  DTOs, review the parsed field order in a visual editor, and their values are read, edited and
+  created as JSON — byte-identical, without any jar and without a restart.
 - *Evict All* and *Clear Map* (the map name has to be typed to confirm).
 - **Memory & Performance Stats**: `LocalMapStats` aggregated over all members — owned / backup
   entries and memory, heap cost, Merkle trees cost, hits, get / put / set / remove counts and
@@ -198,7 +201,9 @@ binary through a fallback pipeline:
 
    `errorCode` is one of `CLASS_NOT_FOUND`, `INCOMPATIBLE_CLASS`,
    `DATA_SERIALIZABLE_FACTORY_MISSING`, `PORTABLE_FACTORY_MISSING`, `CUSTOM_SERIALIZER_MISSING`,
-   `COMPACT_SCHEMA_UNAVAILABLE` or `DESERIALIZATION_ERROR` and is translated by the UI. The
+   `COMPACT_SCHEMA_UNAVAILABLE`, `DTO_SCHEMA_MISSING` (an `IdentifiedDataSerializable` of a Studio
+   factory without a schema; `metadata.missingClassId` names it, nested DTOs included) or
+   `DESERIALIZATION_ERROR` and is translated by the UI. The
    `metadata` is read from the binary header: the class name of Java `Serializable`,
    `Externalizable` and non-identified `DataSerializable` objects, the factory and class ids of
    `IdentifiedDataSerializable` and Portable objects, the schema id of Compact data. `entryCost` comes
@@ -213,59 +218,206 @@ binary through a fallback pipeline:
 | `JSON` | `HazelcastJsonValue` — queryable with SQL predicates without any class |
 | `CLASS` | JSON bound by Jackson to `valueClassName` (classes without a no-arg constructor are allocated without one and filled field by field) |
 | `COMPACT` | a Compact `GenericRecord` built from JSON and `valueSchema` |
+| `IDENTIFIED_DTO` | an `IdentifiedDataSerializable` written by its DTO Schema Studio schema (`valueClassId` + optional `valueFactoryId`, or `valueClassName`) |
 
 `ttlSeconds`: omitted → the map's default TTL; `0` → never expire; `n` → `n` seconds.
 
-**Making your classes available.** With the standalone distribution, copy the jars into its `lib/`
-directory (added to the classpath by the start scripts). Alternatively point
-`admin.hazelcast.serialization.dto-classpath` (or `HZ_DTO_CLASSPATH`) at jars or directories with
-your DTOs; they are loaded by a class loader that both the Hazelcast client and the inspector use.
-Register factories and serializers the same way your application does:
+**Making your classes available** is described in
+[Working with Custom DTOs (Two Approaches)](#working-with-custom-dtos-two-approaches).
+
+## Working with Custom DTOs (Two Approaches)
+
+Hazelcast stores your objects in binary form. To show them as JSON and to write them back, the admin
+service must know how they are laid out. There are two ways to teach it, and they can be combined:
+
+| | Approach 1: DTO Schema Studio | Approach 2: jars in `lib/` |
+|---|---|---|
+| Works for | `IdentifiedDataSerializable` DTOs written field by field (e.g. with `SerializationUtils` helpers) | every format: `Serializable`, `DataSerializable`, `IdentifiedDataSerializable`, Portable, Compact serializers, custom `StreamSerializer`s |
+| You provide | the Java **source text** of the factory and the DTOs (copy & paste) | compiled **jar files** |
+| Dependencies | none | the DTO jar plus every library its classes reference |
+| Changes take effect | immediately after *Save Schema* (no restart) | after a restart of the service |
+| Shared via | `config/dto-schemas.json` (export / import, commit to git) | the jar files |
+
+Classes the admin service can read through neither approach are never a dead end: the inspector
+shows them as *Not deserializable* with the reason, the class (or factory / class id) that is
+missing and the size of the binary.
+
+### Approach 1 (Recommended — Zero Dependencies): Built-in DTO Schema Studio
+
+Most Hazelcast projects implement their DTOs as `IdentifiedDataSerializable` with one
+`DataSerializableFactory` (`FACTORY_ID = 1`) and a `SerializationUtils` helper class:
+
+```java
+public class SomeDTO implements IdentifiedDataSerializable {
+    private Long id;
+    private String name;
+    private Some2DTO details;
+    private List<Some2DTO> items;
+    private int version;
+
+    @Override public int getFactoryId() { return DataSerializableFactory.FACTORY_ID; }
+    @Override public int getClassId()   { return DataSerializableFactory.SOMEDTO; }
+
+    @Override
+    public void readData(ObjectDataInput in) throws IOException {
+        this.id      = SerializationUtils.readNullableLong(in);
+        this.name    = SerializationUtils.readNullableString(in);
+        this.details = SerializationUtils.readNullableObject(in);
+        this.items   = SerializationUtils.readNullableList(in);
+        this.version = in.readInt();
+    }
+    // writeData writes the same fields in the same order
+}
+```
+
+The bytes of such an object are completely described by **the order of the `readData` calls and the
+helper used for each field**. The admin service ships a byte-exact copy of the helpers, so the
+classes themselves are not needed: a schema is enough.
+
+**Step by step**
+
+1. Open **DTO Schemas** in the left sidebar (the badge shows how many classes are registered).
+2. Click **Smart Java Paste**, choose **DataSerializableFactory.java**, paste the whole source of
+   your factory (or *Open .java file*) and press **Parse Factory IDs**. `FACTORY_ID`, every `int`
+   constant (`SOMEDTO = 1`, `SOME2DTO = 2`, …) and the class created for each id are stored. The
+   parser understands `switch` expressions (`case SOMEDTO -> new SomeDTO()`), classic
+   `case X: return new Y();`, constructor arrays (`constructors[X] = arg -> new Y()`) and
+   `map.put(X, Y::new)`. The *Factory* panel then lists every class id and whether it already has a
+   schema.
+3. Switch to **DTO class**, paste `SomeDTO.java` and press **Analyze Java Code**. The parser walks
+   `readData` (or `writeData` when `readData` delegates elsewhere), maps every call to a
+   serialization type and opens the **visual schema editor** with the result:
+   - *Factory ID*, *Class ID* (taken from `getClassId()`, or pick a factory constant) and *Class Name*;
+   - one row per field **in byte order** — reorder with *Move Up* / *Move Down*, add or remove rows;
+   - the *Serialization Type* of each field (`NullableLong`, `NullableString`, `NullableDate`,
+     `NullableObject`, `NullableBoolean`, `NullableInt`, `NullableDouble`, `NullableBigDecimal`,
+     `NullableList`, `NullableLongList`, `NullableIntegerList` or a raw `in.readInt()`,
+     `in.readLong()`, `in.readBoolean()`, `in.readString()`, `in.readByteArray()`);
+   - the *Nested DTO Class* of `NullableObject` / `NullableList` fields (e.g. `Some2DTO`), taken from
+     the field's declared type.
+
+   Everything the parser could not map with certainty (control flow in `readData`, unknown calls,
+   a `writeData` that disagrees with `readData`) is listed as a warning above the table. *Preview
+   JSON* shows the JSON shape the schema produces.
+4. Press **Save Schema**. The schema is written to `config/dto-schemas.json` and used at once: open a
+   map and its `SomeDTO` values appear as JSON (type *Registered DTO*), can be edited in the Entry
+   Inspector and are written back **byte-identical** to what your application writes.
+5. Repeat step 3 for every DTO, nested ones included. A map page lists the classes on the page that
+   still have no schema with a **Configure DTO Schema (Factory ID: X, Class ID: Y)** button; the
+   same button appears in the Entry Inspector of such a value. It opens the Studio with the ids
+   pre-filled.
+
+**Creating values.** In *Put Entry* choose the value type **Registered DTO (IdentifiedDataSerializable)**,
+pick the class (e.g. `SomeDTO (classId: 1)`) and press **Generate JSON Template**: every field,
+nested DTOs included, is filled with a sample value.
+
+**JSON conventions.** Nested DTOs carry `"@classId"` (and `"@factoryId"` when it is not the project
+factory); the top-level object has no markers. Dates are ISO-8601 (epoch milliseconds are accepted
+too), `BigDecimal`s and longs beyond ±2^53 are strings so no digit is lost, `byte[]` is base64.
+Nested values that are neither DTOs, strings nor booleans keep their Java type as
+`{"@javaType": "java.lang.Integer", "value": 5}`.
+
+**`config/dto-schemas.json` and the team.** The file holds the factory mapping and all schemas
+(including the pasted source of each DTO). Its location is `admin.dto-schemas.file`
+(`DTO_SCHEMAS_FILE`, default `./config/dto-schemas.json`, i.e. the `config/` folder of the
+distribution). Share it like any other configuration:
+
+- **Export JSON** downloads the whole registry; each schema card also has its own *Export JSON*.
+- **Import JSON** uploads such a file — *Merge* adds / overwrites schemas with the same ids,
+  *Replace all* makes the registry identical to the file.
+- Or simply commit `dto-schemas.json` next to your DTOs and copy it into `config/` of every
+  installation; it is read on start.
+
+**Factory ids.** Values of the factory ids in `admin.hazelcast.serialization.dynamic-factory-ids`
+(default `[1]`) are decoded by the Studio from the start. Schemas of another factory id are saved
+at once but become readable after the next restart (the card shows *Restart needed*), because
+Hazelcast clients register factories only when they start.
+
+### Approach 2 (Alternative): External JAR in `lib/` folder
+
+Use this for formats the Studio cannot describe — Java `Serializable` / `Externalizable` classes,
+`DataSerializable` without ids, Portable factories, custom `StreamSerializer`s — or when your DTOs
+are already published as a jar.
+
+1. **Get a jar with the classes.** Take the jar your application already publishes (e.g.
+   `my-app-dto-1.4.2.jar` from your Maven repository) or build a lightweight one that contains only
+   the model package:
+
+   ```xml
+   <!-- in the module with your DTOs -->
+   <plugin>
+     <groupId>org.apache.maven.plugins</groupId>
+     <artifactId>maven-jar-plugin</artifactId>
+     <executions>
+       <execution>
+         <id>dto-jar</id>
+         <goals><goal>jar</goal></goals>
+         <configuration>
+           <classifier>dto</classifier>
+           <includes><include>com/example/model/**</include></includes>
+         </configuration>
+       </execution>
+     </executions>
+   </plugin>
+   ```
+
+   or, with plain JDK tools: `jar cf my-dto.jar -C target/classes com/example/model`.
+2. **Copy it into `lib/`** of the distribution, next to `HazelcastInspector.exe`:
+
+   ```text
+   hazelcast-inspector-<version>/
+   ├── HazelcastInspector.exe
+   ├── bin/start.sh, bin/start.bat
+   ├── config/application.yml
+   └── lib/
+       ├── my-app-dto-1.4.2.jar
+       └── joda-money-1.0.4.jar      ← libraries referenced by the DTOs
+   ```
+
+3. **Add the dependencies the classes need.** Everything a DTO references while it is deserialized
+   must be on the classpath as well: field types from other libraries (e.g. `org.joda.money.Money`),
+   base classes and enums from other modules, the classes your factory instantiates. Hazelcast itself,
+   Jackson and Spring are already provided by the admin service — do not copy them. `mvn
+   dependency:copy-dependencies -DincludeScope=runtime -DexcludeGroupIds=com.hazelcast` collects the
+   rest. A missing class is reported as `CLASS_NOT_FOUND` with its name.
+4. **Restart the service** — `HazelcastInspector.exe`, `bin\start.bat` or `bin/start.sh`. All of
+   them start the jar with `-Dloader.path=lib/` from the distribution root, so every jar in `lib/` is
+   on the classpath.
+
+**Automatic registration.** On start, the service scans the jars in `lib/` (and
+`admin.hazelcast.serialization.dto-classpath`) for public classes whose name contains `Factory`
+that implement `DataSerializableFactory` or `PortableFactory` and declare a `static int FACTORY_ID`
+constant (directly or through an implemented interface) — the usual Hazelcast convention. They are
+registered under that id; the log says `Discovered DataSerializableFactory 1 -> com.example...` and the
+Studio's *Storage & factories* panel lists them. Plain `Serializable` classes need no registration
+at all. Explicit configuration wins over discovery and is needed for anything without a
+`FACTORY_ID` constant or for custom serializers:
 
 ```yaml
+# config/application.yml
 admin:
   hazelcast:
     serialization:
-      dto-classpath:
-        - /opt/tsarevna/dto-libs            # every *.jar inside is added
-      compact-serializers:
-        - com.example.serialization.MoneyCompactSerializer
+      auto-register-factories: true        # default
+      dto-classpath:                       # optional extra jars / directories outside lib/
+        - /opt/tsarevna/dto-libs
       data-serializable-factories:
         1000: com.example.serialization.BillingDataSerializableFactory
       portable-factories:
         2000: com.example.serialization.LegacyPortableFactory
+      compact-serializers:
+        - com.example.serialization.MoneyCompactSerializer
       custom-serializers:
         - type-class: com.example.Money
           serializer-class: com.example.serialization.MoneyStreamSerializer
 ```
 
-## Dynamic IdentifiedDataSerializable DTOs (no jars)
+With the classes on the classpath, values are shown field by field (kind *Object*) and can be written
+with the value type **Custom class** (`CLASS`) and the fully qualified class name.
 
-Projects that serialize their DTOs as `IdentifiedDataSerializable` with a single
-`DataSerializableFactory` (`FACTORY_ID = 1`) and `SerializationUtils` helpers
-(`writeNullableLong`, `readNullableString`, …) do not need to ship any jar. The binary format of
-such a DTO is fully described by the order and the helper of each `readData` call, so the admin
-service rebuilds it from the Java source:
-
-1. `POST /api/schemas/parse-factory` with the text of `DataSerializableFactory.java` stores
-   `FACTORY_ID` and the class id of every DTO (`case SOMEDTO -> new SomeDTO()`).
-2. `POST /api/schemas/parse-dto` with the text of a DTO returns its schema: class id (from
-   `getClassId()`), and for every field its position, name and type (`NULLABLE_LONG`,
-   `NULLABLE_OBJECT` → nested DTO, `RAW_INT` for `in.readInt()`, …) plus warnings for anything the
-   parser could not map. `POST /api/schemas` saves the (optionally corrected) schema.
-3. Values of factory 1 are then decoded by a dynamic factory registered on the Hazelcast client:
-   they are shown as JSON (kind `IDENTIFIED_DTO`), can be edited and are written back
-   byte-identical to the owning application's own serialization. Nested DTOs carry an
-   `"@classId"` marker; longs beyond 2^53 and `BigDecimal`s are JSON strings.
-
-Schemas live in `config/dto-schemas.json` (`admin.dto-schemas.file`); use
-`GET /api/schemas/export` / `POST /api/schemas/import?mode=replace|merge` to move them between
-installations. A value whose class id has no schema is reported as `DTO_SCHEMA_MISSING`, naming the
-missing class id (also for nested DTOs). Saving a schema for a new factory id needs a restart
-(`restartRequired` in the response); ids listed in
-`admin.hazelcast.serialization.dynamic-factory-ids` (default `[1]`) are served from the start.
-A jar factory configured for the same id under `data-serializable-factories` stays the fallback
-for class ids without a schema.
+**Combining both approaches.** When a jar factory and Studio schemas use the same factory id (e.g. 1),
+schemas win and the jar factory handles every class id without a schema. So you can start with the
+Studio and add a jar later, or the other way round.
 
 ## Getting started
 
@@ -417,6 +569,7 @@ A warning is logged while the default credentials are in use.
 | `serialization.data-serializable-factories` | | `{}` | Factory id → `DataSerializableFactory` class |
 | `serialization.dynamic-factory-ids` | | `[1]` | Factory ids served by the dynamic DTO schema registry |
 | `serialization.portable-factories` | | `{}` | Factory id → `PortableFactory` class |
+| `serialization.auto-register-factories` | | `true` | Register factories found in `lib/` / `dto-classpath` by their `FACTORY_ID` |
 | `serialization.portable-version` | | `0` | Portable version of the admin client |
 | `serialization.custom-serializers` | | `[]` | `type-class` / `serializer-class` pairs |
 
@@ -563,6 +716,9 @@ archives as a release. Details: [`docs/RELEASING.md`](docs/RELEASING.md).
   `max-fetch-items` only their size is shown.
 - Compact values can be edited, but a new Compact value cannot be created from scratch in the UI
   (a schema is required).
+- The DTO Schema Studio describes `IdentifiedDataSerializable` DTOs whose `readData` is a fixed
+  sequence of reads; conditional or versioned layouts need a jar (Approach 2). Schemas of a new
+  factory id become readable after a restart.
 - Very large `long` numbers nested inside JSON values may lose precision in the browser; top-level
   numeric keys and values are transferred as text and stay exact.
 - Exact-key search with key type `JSON` serializes the typed JSON in compact form; keys stored with

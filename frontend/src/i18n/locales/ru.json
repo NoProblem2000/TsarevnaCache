@@ -65,7 +65,13 @@
     "showInternal": "Показывать служебные объекты",
     "entriesTooltip": "Записей: {{count}}",
     "memoryTooltip": "Занятая память: {{size}}",
-    "loadFailed": "Не удалось загрузить структуры"
+    "loadFailed": "Не удалось загрузить структуры",
+    "schemas": "Схемы DTO",
+    "schemasHint": "DTO Schema Studio: IdentifiedDataSerializable DTO без jar-файлов",
+    "schemasCount_one": "{{count}} зарегистрированный DTO",
+    "schemasCount_few": "{{count}} зарегистрированных DTO",
+    "schemasCount_many": "{{count}} зарегистрированных DTO",
+    "schemasCount_other": "{{count}} зарегистрированных DTO"
   },
   "types": {
     "plural": {
@@ -194,7 +200,11 @@
     "cleared": "Мапа «{{name}}» очищена",
     "deleted": "Запись удалена",
     "saved": "Запись сохранена",
-    "refresh": "Перезагрузить страницу"
+    "refresh": "Перезагрузить страницу",
+    "missingSchemas_one": "{{count}} ключ или значение на странице использует класс IdentifiedDataSerializable без схемы.",
+    "missingSchemas_few": "{{count}} ключа или значения на странице используют классы IdentifiedDataSerializable без схемы.",
+    "missingSchemas_many": "{{count}} ключей или значений на странице используют классы IdentifiedDataSerializable без схемы.",
+    "missingSchemas_other": "{{count}} ключа или значения на странице используют классы IdentifiedDataSerializable без схемы."
   },
   "inspector": {
     "title": "Инспектор записи",
@@ -239,7 +249,10 @@
     "reason": "Причина",
     "headerMetadata": "Заголовок бинарника",
     "entryCost": "Размер записи",
-    "copyKeyRef": "Скопировать ссылку на ключ"
+    "copyKeyRef": "Скопировать ссылку на ключ",
+    "dtoSchemaHint": "Вставьте Java-код этого класса в DTO Schema Studio — значение сразу станет читаемым и редактируемым.",
+    "configureDtoSchema": "Настроить схему DTO (Factory ID: {{factoryId}}, Class ID: {{classId}})",
+    "openSchema": "Схема {{factoryId}}/{{classId}}"
   },
   "putModal": {
     "title": "Добавить запись",
@@ -260,7 +273,15 @@
     "classHint": "Перед записью JSON связывается с этим классом (из classpath админки или DTO).",
     "compactHint": "Сохраняется как Compact-запись; используется схема просмотренного значения.",
     "valuePlaceholder": "Значение…",
-    "jsonPlaceholder": "{ \"name\": \"value\" }"
+    "jsonPlaceholder": "{ \"name\": \"value\" }",
+    "dtoClass": "Зарегистрированный DTO",
+    "pickDto": "Выберите DTO…",
+    "noDtoSchemas": "Схемы DTO не зарегистрированы",
+    "noDtoSchemasHint": "Сначала зарегистрируйте ваши классы IdentifiedDataSerializable.",
+    "openStudio": "Открыть DTO Schema Studio",
+    "generateTemplate": "Сгенерировать JSON-шаблон",
+    "generateTemplateHint": "Заменяет содержимое редактора всеми полями DTO (включая вложенные DTO)",
+    "dtoHint": "Записывается по зарегистрированной схеме байт в байт как в приложении-владельце. Вложенные DTO содержат \"@classId\"; даты в ISO-8601, BigDecimal и большие long — строками."
   },
   "clearModal": {
     "title": "Очистка мапы",
@@ -365,7 +386,7 @@
     "JSON": "JSON (HazelcastJsonValue)",
     "CLASS": "Свой класс",
     "COMPACT": "Compact-запись",
-    "IDENTIFIED_DTO": "DTO по схеме (IdentifiedDataSerializable)"
+    "IDENTIFIED_DTO": "Зарегистрированный DTO (IdentifiedDataSerializable)"
   },
   "errors": {
     "AUTH_REQUIRED": "Войдите, чтобы продолжить.",
@@ -410,7 +431,7 @@
     "CUSTOM_SERIALIZER_MISSING": "Объект записан кастомным сериализатором, который не зарегистрирован.",
     "COMPACT_SCHEMA_UNAVAILABLE": "Не удалось получить Compact-схему из кластера.",
     "DESERIALIZATION_ERROR": "Объект не удалось десериализовать.",
-    "DTO_SCHEMA_MISSING": "Для этого factoryId/classId не зарегистрирована схема DTO. Добавьте её в реестр схем."
+    "DTO_SCHEMA_MISSING": "Для этих factoryId/classId нет схемы DTO. Добавьте её в DTO Schema Studio."
   },
   "notFound": {
     "title": "Страница не найдена",
@@ -422,5 +443,143 @@
     "hours": "{{count}} ч",
     "minutes": "{{count}} мин",
     "seconds": "{{count}} с"
+  },
+  "schemas": {
+    "title": "DTO Schema Studio",
+    "subtitle": "Чтение и редактирование IdentifiedDataSerializable DTO по их Java-коду, без jar-файлов",
+    "count_one": "{{count}} DTO",
+    "count_few": "{{count}} DTO",
+    "count_many": "{{count}} DTO",
+    "count_other": "{{count}} DTO",
+    "smartPaste": "Умная вставка Java",
+    "newSchema": "Новая схема",
+    "exportJson": "Экспорт JSON",
+    "importJson": "Импорт JSON",
+    "exportFailed": "Не удалось выполнить экспорт",
+    "deleted": "Схема {{name}} удалена",
+    "deleteTitle": "Удаление схемы DTO",
+    "deleteConfirm": "Удалить схему {{name}} (factory {{factoryId}}, class {{classId}})? Значения этого класса перестанут читаться, пока схема не будет добавлена снова.",
+    "pendingRestart": "Схемы factory id {{ids}} сохранены, но пока не читаются: динамическая фабрика для нового factory id регистрируется при следующем запуске сервиса.",
+    "filterPlaceholder": "Фильтр по классу, class id или полю…",
+    "noMatches": "Нет схем, подходящих под «{{filter}}»",
+    "factoryId": "Factory ID",
+    "classId": "Class ID",
+    "className": "Имя класса",
+    "factory": {
+      "title": "Фабрика",
+      "parse": "Разобрать фабрику",
+      "active": "Активна",
+      "empty": "Фабрика ещё не разобрана. Вставьте DataSerializableFactory.java, чтобы сопоставить константы и class id.",
+      "hasSchema": "Схема",
+      "addSchema": "Добавить",
+      "noClass": "нет класса"
+    },
+    "storage": {
+      "title": "Хранение и фабрики",
+      "file": "Файл реестра",
+      "activeFactories": "Обслуживаемые динамические factory id",
+      "libraryFactories": "Фабрики из lib/ и конфигурации",
+      "noLibraryFactories": "Нет",
+      "fallback": "резерв для class id без схемы",
+      "shareHint": "Храните dto-schemas.json в репозитории или делитесь им (Экспорт / Импорт), чтобы вся команда читала одни и те же DTO."
+    },
+    "empty": {
+      "title": "Схем DTO пока нет",
+      "text": "Админка читает значения IdentifiedDataSerializable, как только знает порядок и типы их полей. Три шага:",
+      "step1": "Разберите фабрику",
+      "step1Text": "Вставьте DataSerializableFactory.java: сохраняются FACTORY_ID и class id каждого класса (SOMEDTO = 1).",
+      "step2": "Проанализируйте DTO",
+      "step2Text": "Вставьте SomeDTO.java: вызовы readData превращаются в упорядоченный список полей для проверки.",
+      "step3": "Сохраните и смотрите",
+      "step3Text": "Сохранённые схемы действуют сразу: откройте мапу — её DTO показываются и редактируются как JSON."
+    },
+    "card": {
+      "ids": "Factory ID: {{factoryId}} | Class ID: {{classId}}",
+      "fieldCount_one": "{{count}} поле",
+      "fieldCount_few": "{{count}} поля",
+      "fieldCount_many": "{{count}} полей",
+      "fieldCount_other": "{{count}} поля",
+      "pending": "Нужен перезапуск",
+      "pendingHint": "Этот factory id ещё не обслуживается запущенным клиентом Hazelcast; перезапустите сервис.",
+      "nestedMissing": "Для {{name}} ещё нет схемы",
+      "noFields": "Нет полей",
+      "edit": "Изменить схему",
+      "export": "Экспорт JSON"
+    },
+    "editor": {
+      "newTitle": "Новая схема DTO",
+      "editTitle": "Редактирование схемы DTO",
+      "save": "Сохранить схему",
+      "saving": "Сохранение…",
+      "saved": "Схема {{name}} сохранена: значения уже читаются",
+      "savedRestart": "Схема {{name}} сохранена; перезапустите сервис, чтобы читать фабрику {{factoryId}}",
+      "parserWarnings": "Проверьте результат разбора:",
+      "pickConstant": "Константа фабрики…",
+      "noConstants": "Нет констант фабрики",
+      "idsInvalid": "Factory ID и Class ID — целые числа, имя класса — Java-идентификатор.",
+      "fields": "Поля в порядке байтов",
+      "orderHint": "Тот же порядок, что и вызовы в readData: от порядка зависит чтение байтов.",
+      "fieldName": "Имя поля",
+      "serializationType": "Тип сериализации",
+      "nestedClass": "Вложенный DTO-класс",
+      "nestedHint": "DTO-класс объекта / элементов списка (необязательно)",
+      "nestedDisabled": "DTO содержат только поля NullableObject и NullableList",
+      "noNested": "Любой / не DTO",
+      "helperTypes": "Методы SerializationUtils",
+      "rawTypes": "Прямые вызовы ObjectDataInput",
+      "duplicateField": "Поле «{{name}}» уже есть",
+      "invalidField": "Нужен Java-идентификатор (не начинающийся с @)",
+      "moveUp": "Выше",
+      "moveDown": "Ниже",
+      "removeField": "Удалить поле",
+      "addField": "Добавить поле",
+      "noFields": "Полей нет: добавьте их в порядке readData.",
+      "showPreview": "Предпросмотр JSON",
+      "hidePreview": "Скрыть предпросмотр",
+      "previewTitle": "JSON-шаблон этой схемы",
+      "targetMismatch": "У вставленного класса class id {{parsed}}, а у ненайденного значения — {{expected}}: проверьте, тот ли это класс."
+    },
+    "paste": {
+      "title": "Умная вставка Java",
+      "mode": "Тип исходника",
+      "modeFactory": "DataSerializableFactory.java",
+      "modeDto": "Класс DTO (SomeDTO.java)",
+      "openFile": "Открыть .java файл",
+      "factoryHint": "Вставьте фабрику: извлекаются и сохраняются FACTORY_ID, все int-константы и класс для каждого id (switch, case/return, массивы или map.put).",
+      "dtoHint": "Вставьте DTO с readData/writeData: вызовы SerializationUtils и ObjectDataInput станут списком полей в редакторе схемы.",
+      "targetHint": "Не найдено в кластере: {{name}} (Factory ID {{factoryId}}, Class ID {{classId}}). Вставьте его Java-код.",
+      "targetHintUnknown": "Не найден в кластере класс с Factory ID {{factoryId}}, Class ID {{classId}}. Вставьте его Java-код (или сначала разберите фабрику, чтобы увидеть имя).",
+      "parseFactory": "Разобрать Factory ID",
+      "analyze": "Анализировать Java-код",
+      "parsing": "Анализ…",
+      "manual": "Задать поля вручную",
+      "factorySaved_one": "Фабрика {{factoryId}}: сохранена {{count}} константа",
+      "factorySaved_few": "Фабрика {{factoryId}}: сохранены {{count}} константы",
+      "factorySaved_many": "Фабрика {{factoryId}}: сохранено {{count}} констант",
+      "factorySaved_other": "Фабрика {{factoryId}}: сохранено {{count}} константы",
+      "factoryResult_one": "FACTORY_ID = {{factoryId}} · {{count}} константа",
+      "factoryResult_few": "FACTORY_ID = {{factoryId}} · {{count}} константы",
+      "factoryResult_many": "FACTORY_ID = {{factoryId}} · {{count}} констант",
+      "factoryResult_other": "FACTORY_ID = {{factoryId}} · {{count}} константы"
+    },
+    "import": {
+      "title": "Импорт dto-schemas.json",
+      "notRegistry": "Это не файл dto-schemas.json (нет списка \"schemas\").",
+      "summary_one": "{{count}} схема, констант фабрики: {{constants}} (factory id {{factoryId}}).",
+      "summary_few": "{{count}} схемы, констант фабрики: {{constants}} (factory id {{factoryId}}).",
+      "summary_many": "{{count}} схем, констант фабрики: {{constants}} (factory id {{factoryId}}).",
+      "summary_other": "{{count}} схемы, констант фабрики: {{constants}} (factory id {{factoryId}}).",
+      "mode": "Режим импорта",
+      "merge": "Объединить",
+      "replace": "Заменить всё",
+      "mergeHint": "Добавляет схемы и записи фабрики из файла; схемы с теми же id перезаписываются.",
+      "replaceHint": "Полностью заменяет реестр содержимым файла. Схемы, которых нет в файле, удаляются.",
+      "submit": "Импортировать",
+      "importing": "Импорт…",
+      "done_one": "Импорт завершён: зарегистрирована {{count}} схема",
+      "done_few": "Импорт завершён: зарегистрированы {{count}} схемы",
+      "done_many": "Импорт завершён: зарегистрировано {{count}} схем",
+      "done_other": "Импорт завершён: зарегистрировано {{count}} схемы"
+    }
   }
 }

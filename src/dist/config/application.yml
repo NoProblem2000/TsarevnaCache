@@ -38,10 +38,16 @@ admin:
     # Comma separated host:port list of (some of) the cluster members.
     members: ${HZ_MEMBERS:127.0.0.1:5701}
 
-    # Custom DTOs: jars placed in ../lib are already on the classpath (see
-    # lib/README-LIBS.txt). Register factories and serializers your
-    # application uses, exactly as in its own Hazelcast configuration:
+    # Custom DTOs (see README.md, "Working with Custom DTOs"):
+    #  1. IdentifiedDataSerializable DTOs: no jar needed, add them in the web UI
+    #     under "DTO Schemas" (stored in config/dto-schemas.json).
+    #  2. Jars placed in ../lib are on the classpath; factories with a
+    #     FACTORY_ID constant are registered automatically. Register everything
+    #     else exactly as in your application's own Hazelcast configuration:
     serialization:
+      # Factory ids decoded by the DTO Schema Studio.
+      dynamic-factory-ids: [1]
+      auto-register-factories: true
       compact-serializers: []
       #  - com.example.serialization.MoneyCompactSerializer
       data-serializable-factories: {}
@@ -51,6 +57,12 @@ admin:
       custom-serializers: []
       #  - type-class: com.example.Money
       #    serializer-class: com.example.serialization.MoneyStreamSerializer
+
+  # ---------------------------------------------------------------------------
+  # DTO Schema Studio registry (share it with your team, e.g. via git).
+  # ---------------------------------------------------------------------------
+  dto-schemas:
+    file: ${DTO_SCHEMAS_FILE:./config/dto-schemas.json}
 
 # Write a log file next to the distribution (optional):
 # logging:

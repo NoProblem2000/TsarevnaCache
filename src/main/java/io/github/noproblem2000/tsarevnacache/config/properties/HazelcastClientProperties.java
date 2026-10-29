@@ -122,6 +122,13 @@ public class HazelcastClientProperties {
         /** Factory id to {@code PortableFactory} class name. */
         private Map<Integer, String> portableFactories = new LinkedHashMap<>();
 
+        /**
+         * Registers {@code DataSerializableFactory} / {@code PortableFactory} classes found in
+         * {@code lib/} and {@link #dtoClasspath} by their {@code FACTORY_ID} constant. Explicitly
+         * configured factories win over discovered ones.
+         */
+        private boolean autoRegisterFactories = true;
+
         /** Portable version used for {@code ClassDefinition}s of the admin client. */
         private int portableVersion = 0;
 

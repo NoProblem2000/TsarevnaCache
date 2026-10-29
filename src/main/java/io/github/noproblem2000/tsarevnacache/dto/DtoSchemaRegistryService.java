@@ -43,6 +43,7 @@ public class DtoSchemaRegistryService {
 
     private volatile Snapshot snapshot;
     private volatile Set<Integer> activeFactoryIds = Set.of();
+    private volatile Map<Integer, String> libraryFactories = Map.of();
 
     public DtoSchemaRegistryService(DtoSchemaProperties properties, ObjectMapper objectMapper) {
         this.file = Path.of(properties.getFile()).toAbsolutePath().normalize();
@@ -134,6 +135,19 @@ public class DtoSchemaRegistryService {
 
     public boolean isActiveFactory(int factoryId) {
         return activeFactoryIds.contains(factoryId);
+    }
+
+    /**
+     * {@code DataSerializableFactory} classes of the running client (configured or discovered in
+     * {@code lib/}): factory id to class name. For a dynamic factory id it is the fallback for class
+     * ids without a schema.
+     */
+    public Map<Integer, String> libraryFactories() {
+        return libraryFactories;
+    }
+
+    public void setLibraryFactories(Map<Integer, String> factories) {
+        this.libraryFactories = Collections.unmodifiableMap(new TreeMap<>(factories));
     }
 
     /** Location of the registry file. */

@@ -113,7 +113,8 @@ public class SchemaController {
         Set<Integer> inactive = new TreeSet<>(registry.factoryIds());
         inactive.removeAll(registry.activeFactoryIds());
         return new RegistryView(registry.factoryId(), registry.factoryConstants(), registry.factoryClasses(),
-                new TreeSet<>(registry.activeFactoryIds()), inactive, registry.file().toString(), registry.list());
+                new TreeSet<>(registry.activeFactoryIds()), inactive, registry.libraryFactories(), registry.file().toString(),
+                registry.list());
     }
 
     /**
@@ -142,6 +143,8 @@ public class SchemaController {
      * @param factoryClasses    class name to class id
      * @param activeFactoryIds  factory ids served by the running Hazelcast client
      * @param pendingFactoryIds factory ids of schemas that need a restart to become readable
+     * @param libraryFactories  {@code DataSerializableFactory} classes of the client (configured or found in
+     *                          {@code lib/}); for a dynamic factory id the fallback of class ids without a schema
      * @param file              location of {@code dto-schemas.json}
      * @param schemas           all schemas
      */
@@ -151,6 +154,7 @@ public class SchemaController {
             Map<String, Integer> factoryClasses,
             Set<Integer> activeFactoryIds,
             Set<Integer> pendingFactoryIds,
+            Map<Integer, String> libraryFactories,
             String file,
             List<DtoClassSchema> schemas) {
     }

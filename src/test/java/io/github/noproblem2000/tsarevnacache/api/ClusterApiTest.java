@@ -39,8 +39,14 @@ class ClusterApiTest extends AbstractApiTest {
         assertThat(member.path("maxHeap").asLong()).isPositive();
 
         assertThat(overview.path("totals").path("ownedEntryMemoryCost").asLong()).isGreaterThan(100_000);
-        assertThat(overview.path("totals").path("ownedEntryMemoryCostFormatted").asText()).endsWith("KB");
-        assertThat(overview.path("topMaps").get(0).path("name").asText()).isEqualTo("overview-heavy");
+        // other test classes share the cluster and may hold larger maps: no fixed ranking, no fixed unit
+        assertThat(overview.path("totals").path("ownedEntryMemoryCostFormatted").asText()).matches("[0-9.]+ (KB|MB)");
+        JsonNode topMaps = overview.path("topMaps");
+        assertThat(topMaps.size()).isBetween(1, 5);
+        for (int i = 1; i < topMaps.size(); i++) {
+            assertThat(topMaps.get(i - 1).path("ownedEntryMemoryCost").asLong())
+                    .isGreaterThanOrEqualTo(topMaps.get(i).path("ownedEntryMemoryCost").asLong());
+        }
         assertThat(overview.path("structureCounts").path("MAP").asInt()).isPositive();
         assertThat(overview.path("stats").path("available").asBoolean()).isTrue();
     }

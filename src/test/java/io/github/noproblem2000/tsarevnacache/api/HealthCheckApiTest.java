@@ -121,12 +121,16 @@ class HealthCheckApiTest extends AbstractApiTest {
     void ignoredIssuesMoveOutOfTheScoreAndBack() throws Exception {
         JsonNode before = runUntil(active("QUEUE_BACKLOG_GROWTH:hc-backlog", "CLUSTER_SINGLE_MEMBER:Cluster"));
         int score = before.path("healthScore").asInt();
+        int warnings = before.path("counts").path("warning").asInt();
 
         JsonNode ignored = httpPostJson("/api/healthcheck/ignore",
                 Map.of("issueId", "QUEUE_BACKLOG_GROWTH:hc-backlog", "reason", "batch import queue")).body();
         assertThat(issue(ignored, "activeIssues", "QUEUE_BACKLOG_GROWTH:hc-backlog")).isNull();
         assertThat(issue(ignored, "ignoredIssues", "QUEUE_BACKLOG_GROWTH:hc-backlog")).isNotNull();
-        assertThat(ignored.path("healthScore").asInt()).isEqualTo(Math.min(100, score + 10));
+        // the list is applied to the same run; maps of other test classes may already push the score to 0
+        assertThat(ignored.path("lastRunTime").asText()).isEqualTo(before.path("lastRunTime").asText());
+        assertThat(ignored.path("counts").path("warning").asInt()).isEqualTo(warnings - 1);
+        assertThat(ignored.path("healthScore").asInt()).isGreaterThanOrEqualTo(score);
         assertThat(ignored.path("ignores").toString()).contains("batch import queue", "\"createdBy\":\"admin\"");
         assertThat(Files.readString(HEALTHCHECK_IGNORES_FILE)).contains("QUEUE_BACKLOG_GROWTH:hc-backlog");
 

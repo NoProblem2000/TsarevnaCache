@@ -240,6 +240,15 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <!-- META-INF/build-info.properties: the service reports its own version -->
+                        <id>build-info</id>
+                        <goals>
+                            <goal>build-info</goal>
+                        </goals>
+                    </execution>
+                </executions>
                 <configuration>
                     <!--
                         ZIP layout = PropertiesLauncher: the jar still runs with "java -jar", and

@@ -22,6 +22,10 @@ import jakarta.validation.constraints.PositiveOrZero;
  * @param valueClassName value class for {@link DataType#CLASS}
  * @param valueSchema    value schema for {@link DataType#COMPACT}
  * @param ttlSeconds     optional time-to-live; {@code 0} means "never expire", {@code null} uses the map default
+ * @param keyFactoryId   factory id of an {@link DataType#IDENTIFIED_DTO} key (project factory when omitted)
+ * @param keyClassId     class id of an {@link DataType#IDENTIFIED_DTO} key (or use {@code keyClassName})
+ * @param valueFactoryId factory id of an {@link DataType#IDENTIFIED_DTO} value (project factory when omitted)
+ * @param valueClassId   class id of an {@link DataType#IDENTIFIED_DTO} value (or use {@code valueClassName})
  */
 public record PutEntryRequest(
         JsonNode key,
@@ -33,13 +37,17 @@ public record PutEntryRequest(
         @NotNull DataType valueType,
         String valueClassName,
         @Valid RecordSchemaDTO valueSchema,
-        @PositiveOrZero Long ttlSeconds) {
+        @PositiveOrZero Long ttlSeconds,
+        Integer keyFactoryId,
+        Integer keyClassId,
+        Integer valueFactoryId,
+        Integer valueClassId) {
 
     public TypedValueInput keyInput() {
-        return new TypedValueInput(key, keyType, keyClassName, keySchema);
+        return new TypedValueInput(key, keyType, keyClassName, keySchema, keyFactoryId, keyClassId);
     }
 
     public TypedValueInput valueInput() {
-        return new TypedValueInput(value, valueType, valueClassName, valueSchema);
+        return new TypedValueInput(value, valueType, valueClassName, valueSchema, valueFactoryId, valueClassId);
     }
 }

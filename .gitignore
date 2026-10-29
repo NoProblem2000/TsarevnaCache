@@ -30,3 +30,6 @@ Thumbs.db
 application-local.yml
 .env
 .env.*
+
+# Runtime data of local runs (dto-schemas.json, ...)
+/config/

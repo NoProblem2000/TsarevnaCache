@@ -13,6 +13,8 @@ public enum ValueKind {
     JSON,
     /** Compact {@code GenericRecord} (class not on the admin classpath). */
     COMPACT,
+    /** {@code IdentifiedDataSerializable} DTO decoded through a dynamic schema. */
+    IDENTIFIED_DTO,
     /** Portable {@code GenericRecord}. */
     PORTABLE,
     /** A Java object converted to JSON with Jackson. */

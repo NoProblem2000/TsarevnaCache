@@ -84,6 +84,10 @@ admin:
       compact-serializers: []
       # factoryId -> fully qualified DataSerializableFactory class name.
       data-serializable-factories: {}
+      # Factory ids answered by the dynamic DTO schema registry (IdentifiedDataSerializable
+      # DTOs read from pasted Java sources, no jars needed). A class configured above for
+      # the same id becomes the fallback for class ids without a schema.
+      dynamic-factory-ids: [1]
       # factoryId -> fully qualified PortableFactory class name.
       portable-factories: {}
       portable-version: 0
@@ -91,6 +95,13 @@ admin:
       custom-serializers: []
       #  - type-class: com.example.Money
       #    serializer-class: com.example.MoneySerializer
+
+  # ---------------------------------------------------------------------------
+  # Dynamic IdentifiedDataSerializable DTO schemas (managed via /api/schemas).
+  # ---------------------------------------------------------------------------
+  dto-schemas:
+    # Relative paths resolve against the working directory (the distribution root).
+    file: ${DTO_SCHEMAS_FILE:./config/dto-schemas.json}
 
   # ---------------------------------------------------------------------------
   # Value inspector (JSON rendering of keys/values and typed writes).

@@ -12,6 +12,7 @@ import com.hazelcast.internal.serialization.Data;
 import com.hazelcast.internal.serialization.impl.HeapData;
 import io.github.noproblem2000.tsarevnacache.api.dto.DeserializationErrorCode;
 import io.github.noproblem2000.tsarevnacache.api.dto.UnresolvedObjectDTO;
+import io.github.noproblem2000.tsarevnacache.dto.DtoSchemaRegistryService;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -22,6 +23,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
 
 /**
@@ -38,6 +41,52 @@ final class UnresolvedDataAnalyzer {
     private static final int GZIP_MAGIC_SECOND = 0x8B;
     private static final int MAX_CLASS_NAME_LENGTH = 1024;
     private static final int MAX_STREAM_SCAN = 64;
+
+    /**
+     * Hazelcast 5.5 messages naming a nested IdentifiedDataSerializable that could not be created:
+     * {@code "<factory> is not be able to create an instance for ID: 2 on factory ID: 1"} (class id
+     * first) and {@code "Problem while reading DataSerializable, namespace: 1, ID: 2, ..."}.
+     */
+    private static final Pattern CREATE_FAILURE = Pattern.compile(
+            "create an instance for ID: (-?\\d+) on factory ID: (-?\\d+)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern READ_FAILURE = Pattern.compile(
+            "reading DataSerializable, namespace: (-?\\d+), ID: (-?\\d+)", Pattern.CASE_INSENSITIVE);
+
+    private final DtoSchemaRegistryService dtoSchemas;
+
+    /**
+     * @param dtoSchemas dynamic DTO registry used to recognize missing schemas, may be {@code null}
+     */
+    UnresolvedDataAnalyzer(DtoSchemaRegistryService dtoSchemas) {
+        this.dtoSchemas = dtoSchemas;
+    }
+
+    /**
+     * Factory id / class id of a missing dynamic DTO schema: the top-level object (from the binary
+     * header) or a nested one (from Hazelcast's error message), or {@code null}.
+     */
+    private int[] missingDtoSchema(int typeId, Map<String, Object> metadata, String messages) {
+        if (dtoSchemas == null || typeId != CONSTANT_TYPE_DATA_SERIALIZABLE) {
+            return null;
+        }
+        if (metadata.get("factoryId") instanceof Integer factoryId && metadata.get("classId") instanceof Integer classId
+                && dtoSchemas.isActiveFactory(factoryId) && dtoSchemas.find(factoryId, classId).isEmpty()) {
+            return new int[] {factoryId, classId};
+        }
+        int[] missing = missingIn(CREATE_FAILURE.matcher(messages), 2, 1);
+        return missing != null ? missing : missingIn(READ_FAILURE.matcher(messages), 1, 2);
+    }
+
+    private int[] missingIn(Matcher matcher, int factoryGroup, int classGroup) {
+        while (matcher.find()) {
+            int factoryId = Integer.parseInt(matcher.group(factoryGroup));
+            int classId = Integer.parseInt(matcher.group(classGroup));
+            if (dtoSchemas.isActiveFactory(factoryId) && dtoSchemas.find(factoryId, classId).isEmpty()) {
+                return new int[] {factoryId, classId};
+            }
+        }
+        return null;
+    }
 
     UnresolvedObjectDTO analyze(Data data, Throwable error) {
         int typeId = data.getType();
@@ -64,6 +113,14 @@ final class UnresolvedDataAnalyzer {
                 && (messages.contains("factory") || messages.contains("class-definition")
                 || messages.contains("class definition"))) {
             code = DeserializationErrorCode.PORTABLE_FACTORY_MISSING;
+        } else if (missingDtoSchema(typeId, metadata, messages) != null) {
+            int[] missing = missingDtoSchema(typeId, metadata, messages);
+            code = DeserializationErrorCode.DTO_SCHEMA_MISSING;
+            metadata.put("missingFactoryId", missing[0]);
+            metadata.put("missingClassId", missing[1]);
+            missingClass = dtoSchemas.classNameFor(missing[0], missing[1])
+                    .map(name -> name + " (factoryId=" + missing[0] + ", classId=" + missing[1] + ")")
+                    .orElse("factoryId=" + missing[0] + ", classId=" + missing[1]);
         } else if (typeId == CONSTANT_TYPE_DATA_SERIALIZABLE && messages.contains("factory")) {
             code = DeserializationErrorCode.DATA_SERIALIZABLE_FACTORY_MISSING;
         } else if (typeId > 0) {

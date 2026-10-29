@@ -52,7 +52,8 @@
     "members_one": "{{count}} узел",
     "members_few": "{{count}} узла",
     "members_many": "{{count}} узлов",
-    "members_other": "{{count}} узла"
+    "members_other": "{{count}} узла",
+    "version": "Версия {{version}}"
   },
   "sidebar": {
     "overview": "Обзор кластера",
@@ -346,7 +347,8 @@
     "ARRAY": "Массив",
     "BYTES": "Байты",
     "DATE_TIME": "Дата/время",
-    "UNRESOLVED": "Не распознано"
+    "UNRESOLVED": "Не распознано",
+    "IDENTIFIED_DTO": "DTO (IdentifiedDataSerializable)"
   },
   "dataTypes": {
     "STRING": "String",
@@ -362,7 +364,8 @@
     "BIG_INTEGER": "BigInteger",
     "JSON": "JSON (HazelcastJsonValue)",
     "CLASS": "Свой класс",
-    "COMPACT": "Compact-запись"
+    "COMPACT": "Compact-запись",
+    "IDENTIFIED_DTO": "DTO по схеме (IdentifiedDataSerializable)"
   },
   "errors": {
     "AUTH_REQUIRED": "Войдите, чтобы продолжить.",
@@ -394,7 +397,10 @@
     "CLUSTER_TIMEOUT": "Кластер не ответил вовремя.",
     "INTERNAL_ERROR": "Непредвиденная ошибка сервера.",
     "NETWORK_ERROR": "Сервис администрирования недоступен.",
-    "UNKNOWN": "Что-то пошло не так."
+    "UNKNOWN": "Что-то пошло не так.",
+    "DTO_SCHEMA_INVALID": "Схема DTO некорректна.",
+    "DTO_SCHEMA_NOT_FOUND": "Схема DTO не зарегистрирована.",
+    "DTO_SOURCE_NOT_RECOGNIZED": "В Java-коде не найдено ничего, из чего можно построить схему."
   },
   "deserialization": {
     "CLASS_NOT_FOUND": "Класса этого объекта нет в classpath админки.",
@@ -403,7 +409,8 @@
     "PORTABLE_FACTORY_MISSING": "Для этого объекта нет PortableFactory или определения класса.",
     "CUSTOM_SERIALIZER_MISSING": "Объект записан кастомным сериализатором, который не зарегистрирован.",
     "COMPACT_SCHEMA_UNAVAILABLE": "Не удалось получить Compact-схему из кластера.",
-    "DESERIALIZATION_ERROR": "Объект не удалось десериализовать."
+    "DESERIALIZATION_ERROR": "Объект не удалось десериализовать.",
+    "DTO_SCHEMA_MISSING": "Для этого factoryId/classId не зарегистрирована схема DTO. Добавьте её в реестр схем."
   },
   "notFound": {
     "title": "Страница не найдена",

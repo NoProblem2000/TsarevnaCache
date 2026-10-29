@@ -10,6 +10,9 @@ import io.github.noproblem2000.tsarevnacache.api.dto.TypedValueInput;
 import io.github.noproblem2000.tsarevnacache.api.error.ApiException;
 import io.github.noproblem2000.tsarevnacache.api.error.ErrorCode;
 import io.github.noproblem2000.tsarevnacache.config.DtoClassLoader;
+import io.github.noproblem2000.tsarevnacache.dto.DtoClassSchema;
+import io.github.noproblem2000.tsarevnacache.dto.DtoSchemaRegistryService;
+import io.github.noproblem2000.tsarevnacache.dto.DynamicDtoConverter;
 import java.io.IOException;
 import java.lang.reflect.Modifier;
 import java.math.BigDecimal;
@@ -28,11 +31,30 @@ final class TypedValueParser {
     private final DtoClassLoader classLoader;
     private final List<String> deniedClassPrefixes;
     private final ObjenesisStd objenesis = new ObjenesisStd(true);
+    private final DtoSchemaRegistryService dtoSchemas;
 
-    TypedValueParser(ObjectMapper mapper, DtoClassLoader classLoader, List<String> deniedClassPrefixes) {
+    TypedValueParser(ObjectMapper mapper, DtoClassLoader classLoader, List<String> deniedClassPrefixes,
+                     DtoSchemaRegistryService dtoSchemas) {
         this.mapper = mapper;
         this.classLoader = classLoader;
         this.deniedClassPrefixes = List.copyOf(deniedClassPrefixes);
+        this.dtoSchemas = dtoSchemas;
+    }
+
+    /** Schema of an IDENTIFIED_DTO input: by class id (and factory id) or by DTO class name. */
+    private DtoClassSchema dtoSchema(TypedValueInput input) {
+        if (input.classId() != null) {
+            int factoryId = input.factoryId() != null ? input.factoryId() : dtoSchemas.factoryId();
+            return dtoSchemas.find(factoryId, input.classId()).orElseThrow(() -> new ApiException(
+                    ErrorCode.DTO_SCHEMA_NOT_FOUND, "No DTO schema for factoryId=" + factoryId + ", classId=" + input.classId(),
+                    Map.of("factoryId", factoryId, "classId", input.classId())));
+        }
+        if (StringUtils.hasText(input.className())) {
+            return dtoSchemas.findByClassName(input.className()).orElseThrow(() -> new ApiException(
+                    ErrorCode.DTO_SCHEMA_NOT_FOUND, "No DTO schema for class " + input.className(),
+                    Map.of("className", input.className())));
+        }
+        throw new ApiException(ErrorCode.VALUE_REQUIRED, "IDENTIFIED_DTO values need a classId or a DTO class name");
     }
 
     Object parse(TypedValueInput input) {
@@ -66,6 +88,7 @@ final class TypedValueParser {
                     }
                     yield CompactRecordFactory.build(input.schema(), json(raw));
                 }
+                case IDENTIFIED_DTO -> DynamicDtoConverter.fromJson(json(raw), dtoSchema(input), dtoSchemas);
             };
         } catch (IllegalArgumentException | ArithmeticException e) {
             // NumberFormatException, UUID.fromString, *ValueExact range checks

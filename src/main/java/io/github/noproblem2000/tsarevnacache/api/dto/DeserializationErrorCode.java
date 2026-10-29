@@ -19,5 +19,7 @@ public enum DeserializationErrorCode {
     /** The Compact schema could not be obtained from the cluster. */
     COMPACT_SCHEMA_UNAVAILABLE,
     /** Any other deserialization failure. */
-    DESERIALIZATION_ERROR
+    DESERIALIZATION_ERROR,
+    /** The factory id is served by the dynamic DTO registry, but no schema is registered for the class id. */
+    DTO_SCHEMA_MISSING
 }

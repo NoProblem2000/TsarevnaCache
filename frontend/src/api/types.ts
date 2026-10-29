@@ -18,6 +18,9 @@ export type ErrorCode =
   | 'SCHEMA_REQUIRED'
   | 'SCHEMA_INVALID'
   | 'INVALID_KEY_REF'
+  | 'DTO_SCHEMA_INVALID'
+  | 'DTO_SCHEMA_NOT_FOUND'
+  | 'DTO_SOURCE_NOT_RECOGNIZED'
   | 'INVALID_CURSOR'
   | 'INVALID_PREDICATE'
   | 'CONFIRMATION_REQUIRED'
@@ -66,7 +69,9 @@ export type DataType =
   | 'BIG_INTEGER'
   | 'JSON'
   | 'CLASS'
-  | 'COMPACT';
+  | 'COMPACT'
+  | 'IDENTIFIED_DTO'
+  | 'IDENTIFIED_DTO';
 
 export const DATA_TYPES: DataType[] = [
   'STRING', 'INTEGER', 'LONG', 'SHORT', 'BYTE', 'DOUBLE', 'FLOAT', 'BOOLEAN', 'UUID',
@@ -84,6 +89,7 @@ export type ValueKind =
   | 'UUID'
   | 'JSON'
   | 'COMPACT'
+  | 'IDENTIFIED_DTO'
   | 'PORTABLE'
   | 'OBJECT'
   | 'COLLECTION'
@@ -100,7 +106,8 @@ export type DeserializationErrorCode =
   | 'PORTABLE_FACTORY_MISSING'
   | 'CUSTOM_SERIALIZER_MISSING'
   | 'COMPACT_SCHEMA_UNAVAILABLE'
-  | 'DESERIALIZATION_ERROR';
+  | 'DESERIALIZATION_ERROR'
+  | 'DTO_SCHEMA_MISSING';
 
 export type FieldKind = string;
 
@@ -212,6 +219,10 @@ export interface PutEntryRequest {
   valueClassName?: string;
   valueSchema?: RecordSchemaDTO;
   ttlSeconds?: number;
+  keyFactoryId?: number;
+  keyClassId?: number;
+  valueFactoryId?: number;
+  valueClassId?: number;
 }
 
 export interface StatsStatusDTO {
@@ -355,6 +366,8 @@ export interface ClusterOverviewDTO {
   structureCounts: Record<StructureType, number>;
   topMaps: MapMemory[];
   stats: StatsStatusDTO;
+  /** Version of the admin service itself. */
+  appVersion?: string;
 }
 
 export interface StructureDTO {

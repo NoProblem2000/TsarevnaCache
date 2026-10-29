@@ -13,12 +13,17 @@ import com.hazelcast.config.SerializerConfig;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.LifecycleEvent;
 import com.hazelcast.core.LifecycleListener;
+import com.hazelcast.nio.serialization.DataSerializableFactory;
 import com.hazelcast.nio.serialization.compact.CompactSerializer;
 import io.github.noproblem2000.tsarevnacache.config.properties.HazelcastClientProperties;
 import io.github.noproblem2000.tsarevnacache.config.properties.HazelcastClientProperties.CustomSerializer;
 import io.github.noproblem2000.tsarevnacache.config.properties.HazelcastClientProperties.Retry;
 import io.github.noproblem2000.tsarevnacache.config.properties.HazelcastClientProperties.Serialization;
+import io.github.noproblem2000.tsarevnacache.dto.DtoSchemaRegistryService;
+import io.github.noproblem2000.tsarevnacache.dto.DynamicDataSerializableFactory;
 import java.time.Duration;
+import java.util.Set;
+import java.util.TreeSet;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -52,7 +57,8 @@ public class HazelcastClientConfig {
 
     @Bean
     public ClientConfig hazelcastClientConfiguration(HazelcastClientProperties properties,
-                                                     DtoClassLoader dtoClassLoader) {
+                                                     DtoClassLoader dtoClassLoader,
+                                                     DtoSchemaRegistryService dtoSchemaRegistry) {
         ClientConfig config = new ClientConfig();
         config.setClusterName(properties.getClusterName());
         config.setClassLoader(dtoClassLoader);
@@ -71,7 +77,8 @@ public class HazelcastClientConfig {
 
         configureNetwork(config.getNetworkConfig(), properties);
         configureConnectionStrategy(config.getConnectionStrategyConfig(), properties);
-        configureSerialization(config.getSerializationConfig(), properties.getSerialization(), dtoClassLoader);
+        configureSerialization(config.getSerializationConfig(), properties.getSerialization(), dtoClassLoader,
+                dtoSchemaRegistry);
 
         config.addListenerConfig(new ListenerConfig(new ConnectionStateLogger(properties.getClusterName())));
         return config;
@@ -118,7 +125,8 @@ public class HazelcastClientConfig {
 
     private static void configureSerialization(SerializationConfig serialization,
                                                Serialization properties,
-                                               DtoClassLoader classLoader) {
+                                               DtoClassLoader classLoader,
+                                               DtoSchemaRegistryService dtoSchemaRegistry) {
         serialization.setPortableVersion(properties.getPortableVersion());
 
         CompactSerializationConfig compact = serialization.getCompactSerializationConfig();
@@ -135,9 +143,25 @@ public class HazelcastClientConfig {
             }
         }
 
+        // Dynamic DTO factories (schemas from config/dto-schemas.json); a real factory configured for
+        // the same id becomes their fallback instead of being registered twice.
+        Set<Integer> dynamicIds = new TreeSet<>(properties.getDynamicFactoryIds());
+        dynamicIds.addAll(dtoSchemaRegistry.factoryIds());
+        for (int factoryId : dynamicIds) {
+            String delegateClass = properties.getDataSerializableFactories().get(factoryId);
+            DataSerializableFactory delegate = delegateClass == null || delegateClass.isBlank() ? null
+                    : instantiate(classLoader, delegateClass, DataSerializableFactory.class);
+            serialization.addDataSerializableFactory(factoryId,
+                    new DynamicDataSerializableFactory(factoryId, dtoSchemaRegistry, delegate));
+            log.info("Registered dynamic DTO factory {}{}", factoryId, delegate == null ? "" : " (fallback " + delegateClass + ")");
+        }
+        dtoSchemaRegistry.setActiveFactoryIds(dynamicIds);
+
         properties.getDataSerializableFactories().forEach((factoryId, className) -> {
-            serialization.addDataSerializableFactoryClass(factoryId, className.trim());
-            log.info("Registered DataSerializableFactory {} -> {}", factoryId, className);
+            if (!dynamicIds.contains(factoryId)) {
+                serialization.addDataSerializableFactoryClass(factoryId, className.trim());
+                log.info("Registered DataSerializableFactory {} -> {}", factoryId, className);
+            }
         });
         properties.getPortableFactories().forEach((factoryId, className) -> {
             serialization.addPortableFactoryClass(factoryId, className.trim());

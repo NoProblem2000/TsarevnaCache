@@ -16,6 +16,8 @@ import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.hazelcast.core.HazelcastJsonValue;
 import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
+import io.github.noproblem2000.tsarevnacache.dto.DynamicDtoJsonSerializer;
+import io.github.noproblem2000.tsarevnacache.dto.DynamicDtoRecord;
 import java.io.IOException;
 
 /**
@@ -35,6 +37,7 @@ final class InspectorObjectMapperFactory {
         SimpleModule hazelcastModule = new SimpleModule("tsarevna-hazelcast");
         hazelcastModule.addSerializer(GenericRecord.class, new GenericRecordSerializer());
         hazelcastModule.addSerializer(HazelcastJsonValue.class, new HazelcastJsonValueSerializer());
+        hazelcastModule.addSerializer(DynamicDtoRecord.class, new DynamicDtoJsonSerializer());
 
         return JsonMapper.builder()
                 .addModule(new JavaTimeModule())

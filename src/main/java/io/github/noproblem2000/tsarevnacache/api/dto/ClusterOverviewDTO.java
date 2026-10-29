@@ -16,6 +16,7 @@ import java.util.Map;
  * @param structureCounts number of (non-internal) distributed objects per type
  * @param topMaps         the five maps with the highest owned entry memory cost
  * @param stats           availability of the metrics behind the statistics
+ * @param appVersion      version of this admin service (the release it was built from)
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record ClusterOverviewDTO(
@@ -27,7 +28,8 @@ public record ClusterOverviewDTO(
         Totals totals,
         Map<StructureType, Integer> structureCounts,
         List<MapMemory> topMaps,
-        StatsStatusDTO stats) {
+        StatsStatusDTO stats,
+        String appVersion) {
 
     /**
      * Aggregated statistics over all maps.

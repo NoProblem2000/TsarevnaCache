@@ -48,6 +48,7 @@ public final class EmbeddedCluster {
         config.getSerializationConfig()
                 .addDataSerializableFactoryClass(HiddenClasses.IDS_FACTORY_ID, "hidden.HiddenDataSerializableFactory")
                 .addPortableFactoryClass(HiddenClasses.PORTABLE_FACTORY_ID, "hidden.HiddenPortableFactory")
+                .addDataSerializableFactoryClass(1, "prod.model.DataSerializableFactory")
                 .addSerializerConfig(new SerializerConfig()
                         .setTypeClassName("hidden.HiddenCustom")
                         .setClassName("hidden.HiddenCustomSerializer"));
@@ -86,6 +87,27 @@ public final class EmbeddedCluster {
             Class<?> type = Class.forName("hidden." + simpleName, true, hiddenClassLoader);
             Constructor<?> constructor = type.getConstructor(types);
             return constructor.newInstance(args);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** Instantiates a member-only class (e.g. {@code prod.model.SomeDTO}) through its no-arg constructor. */
+    public Object newMemberObject(String className) {
+        try {
+            return Class.forName(className, true, hiddenClassLoader).getConstructor().newInstance();
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** Writes a (private) field of an object; returns the object. */
+    public static Object setField(Object target, String name, Object value) {
+        try {
+            Field field = target.getClass().getDeclaredField(name);
+            field.setAccessible(true);
+            field.set(target, value);
+            return target;
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException(e);
         }

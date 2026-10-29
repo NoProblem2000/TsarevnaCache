@@ -25,6 +25,7 @@ never seen.
 - [Features](#features)
 - [Architecture](#architecture)
 - [How custom DTO deserialization works](#how-custom-dto-deserialization-works)
+- [Dynamic IdentifiedDataSerializable DTOs (no jars)](#dynamic-identifieddataserializable-dtos-no-jars)
 - [Getting started](#getting-started)
 - [Configuration](#configuration)
 - [REST API](#rest-api)
@@ -238,6 +239,34 @@ admin:
           serializer-class: com.example.serialization.MoneyStreamSerializer
 ```
 
+## Dynamic IdentifiedDataSerializable DTOs (no jars)
+
+Projects that serialize their DTOs as `IdentifiedDataSerializable` with a single
+`DataSerializableFactory` (`FACTORY_ID = 1`) and `SerializationUtils` helpers
+(`writeNullableLong`, `readNullableString`, …) do not need to ship any jar. The binary format of
+such a DTO is fully described by the order and the helper of each `readData` call, so the admin
+service rebuilds it from the Java source:
+
+1. `POST /api/schemas/parse-factory` with the text of `DataSerializableFactory.java` stores
+   `FACTORY_ID` and the class id of every DTO (`case SOMEDTO -> new SomeDTO()`).
+2. `POST /api/schemas/parse-dto` with the text of a DTO returns its schema: class id (from
+   `getClassId()`), and for every field its position, name and type (`NULLABLE_LONG`,
+   `NULLABLE_OBJECT` → nested DTO, `RAW_INT` for `in.readInt()`, …) plus warnings for anything the
+   parser could not map. `POST /api/schemas` saves the (optionally corrected) schema.
+3. Values of factory 1 are then decoded by a dynamic factory registered on the Hazelcast client:
+   they are shown as JSON (kind `IDENTIFIED_DTO`), can be edited and are written back
+   byte-identical to the owning application's own serialization. Nested DTOs carry an
+   `"@classId"` marker; longs beyond 2^53 and `BigDecimal`s are JSON strings.
+
+Schemas live in `config/dto-schemas.json` (`admin.dto-schemas.file`); use
+`GET /api/schemas/export` / `POST /api/schemas/import?mode=replace|merge` to move them between
+installations. A value whose class id has no schema is reported as `DTO_SCHEMA_MISSING`, naming the
+missing class id (also for nested DTOs). Saving a schema for a new factory id needs a restart
+(`restartRequired` in the response); ids listed in
+`admin.hazelcast.serialization.dynamic-factory-ids` (default `[1]`) are served from the start.
+A jar factory configured for the same id under `data-serializable-factories` stays the fallback
+for class ids without a schema.
+
 ## Getting started
 
 ### Requirements
@@ -386,6 +415,7 @@ A warning is logged while the default credentials are in use.
 | `serialization.compact-classes` | | `[]` | Classes registered for zero-config Compact serialization |
 | `serialization.compact-serializers` | | `[]` | `CompactSerializer` implementations |
 | `serialization.data-serializable-factories` | | `{}` | Factory id → `DataSerializableFactory` class |
+| `serialization.dynamic-factory-ids` | | `[1]` | Factory ids served by the dynamic DTO schema registry |
 | `serialization.portable-factories` | | `{}` | Factory id → `PortableFactory` class |
 | `serialization.portable-version` | | `0` | Portable version of the admin client |
 | `serialization.custom-serializers` | | `[]` | `type-class` / `serializer-class` pairs |
@@ -396,6 +426,12 @@ A warning is logged while the default credentials are in use.
 |---|---|---|
 | `preview-length` | `160` | Length of the single-line value preview in tables |
 | `denied-class-prefixes` | `java.`, `javax.`, `jdk.`, `sun.`, `com.sun.`, `org.springframework.`, `com.hazelcast.`, `io.github.noproblem2000.tsarevnacache.` | Packages that cannot be used as `CLASS` targets when writing values |
+
+### DTO schema registry — `admin.dto-schemas.*`
+
+| Property | Env variable | Default | Description |
+|---|---|---|---|
+| `file` | `DTO_SCHEMAS_FILE` | `./config/dto-schemas.json` | Schemas of dynamic `IdentifiedDataSerializable` DTOs and the factory mapping |
 
 ### Explorer limits — `admin.explorer.*`
 
@@ -441,6 +477,13 @@ All endpoints below `/api` require the administrator. Errors are returned as
 | `GET` | `/api/other/{type}/{name}?limit=50` | Size and first items (`queue`, `set`, `list`, `multimap`, `replicatedmap`) |
 | `DELETE` | `/api/other/{type}/{name}/item?ref&keyRef` | Remove one item |
 | `DELETE` | `/api/other/{type}/{name}/clear?confirm={name}` | Clear the structure |
+| `GET` | `/api/schemas` | Factory mapping, active / pending factory ids and all DTO schemas |
+| `POST` | `/api/schemas/parse-factory?save=true` | Parse `DataSerializableFactory.java` `{ "source" }` |
+| `POST` | `/api/schemas/parse-dto` | Parse a DTO class `{ "source" }` (preview, not saved) |
+| `POST` | `/api/schemas` | Save a DTO schema |
+| `DELETE` | `/api/schemas/{factoryId}/{classId}` | Delete a DTO schema |
+| `GET` | `/api/schemas/export` | Download `dto-schemas.json` |
+| `POST` | `/api/schemas/import?mode=replace\|merge` | Upload `dto-schemas.json` |
 
 Scripts can use HTTP Basic; such requests are exempt from CSRF checks:
 

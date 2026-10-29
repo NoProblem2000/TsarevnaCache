@@ -111,6 +111,14 @@ public class HazelcastClientProperties {
         /** Factory id to {@code DataSerializableFactory} class name. */
         private Map<Integer, String> dataSerializableFactories = new LinkedHashMap<>();
 
+        /**
+         * Factory ids served by the dynamic DTO schema registry ({@code IdentifiedDataSerializable}
+         * without classes). A class configured in {@link #dataSerializableFactories} for the same id
+         * becomes the fallback for class ids without a schema. Factory ids of registered schemas are
+         * added automatically on start.
+         */
+        private List<Integer> dynamicFactoryIds = new ArrayList<>(List.of(1));
+
         /** Factory id to {@code PortableFactory} class name. */
         private Map<Integer, String> portableFactories = new LinkedHashMap<>();
 

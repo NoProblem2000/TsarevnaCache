@@ -60,6 +60,11 @@ export function TopBar() {
       </div>
 
       <div className="ml-auto flex items-center gap-3">
+        {overview.data?.appVersion && (
+          <span className="gk-badge hidden bg-gk-card py-1 text-gk-muted md:inline-flex" title={t('topBar.version', { version: overview.data.appVersion })}>
+            v{overview.data.appVersion}
+          </span>
+        )}
         <LanguageSwitch />
         {user && (
           <span className="hidden items-center gap-1.5 text-xs text-gk-muted md:inline-flex" title={t('auth.signedInAs', { user: user.username })}>

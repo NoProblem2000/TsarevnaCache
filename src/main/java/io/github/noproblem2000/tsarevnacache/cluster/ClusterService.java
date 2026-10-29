@@ -22,6 +22,8 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.info.BuildProperties;
 import org.springframework.stereotype.Service;
 
 /**
@@ -36,12 +38,16 @@ public class ClusterService {
     private final ClientAccess clientAccess;
     private final ClusterMetricsService metricsService;
     private final HazelcastClientProperties clientProperties;
+    private final String appVersion;
 
     public ClusterService(ClientAccess clientAccess, ClusterMetricsService metricsService,
-                          HazelcastClientProperties clientProperties) {
+                          HazelcastClientProperties clientProperties, ObjectProvider<BuildProperties> buildProperties) {
         this.clientAccess = clientAccess;
         this.metricsService = metricsService;
         this.clientProperties = clientProperties;
+        // META-INF/build-info.properties is written by the Maven build; absent when run from an IDE
+        BuildProperties build = buildProperties.getIfAvailable();
+        this.appVersion = build != null ? build.getVersion() : "dev";
     }
 
     /**
@@ -52,7 +58,7 @@ public class ClusterService {
         if (!clientAccess.isConnected()) {
             return new ClusterOverviewDTO(false, clientProperties.getClusterName(), clientVersion, null,
                     List.of(), new Totals(0, 0, 0, 0, ByteSize.format(0), 0, ByteSize.format(0)),
-                    emptyCounts(), List.of(), metricsService.current().status());
+                    emptyCounts(), List.of(), metricsService.current().status(), appVersion);
         }
 
         ClusterMetrics metrics = metricsService.current();
@@ -92,7 +98,7 @@ public class ClusterService {
         Totals totals = new Totals(objects, mapNames.size(), entries, owned, ByteSize.format(owned),
                 backup, ByteSize.format(backup));
         return new ClusterOverviewDTO(true, clientProperties.getClusterName(), clientVersion, clusterVersion,
-                members, totals, counts, top, metrics.status());
+                members, totals, counts, top, metrics.status(), appVersion);
     }
 
     private List<MemberDTO> members(ClusterMetrics metrics) {

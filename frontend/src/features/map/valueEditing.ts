@@ -2,7 +2,7 @@ import type { DataType, InspectedValue, JsonValue } from '../../api/types';
 import { parseEditorText, toEditorText } from '../../components/editor/jsonText';
 
 /** Types edited in the JSON editor; all others use a single-line text input. */
-export const JSON_EDITED_TYPES: DataType[] = ['JSON', 'CLASS', 'COMPACT'];
+export const JSON_EDITED_TYPES: DataType[] = ['JSON', 'CLASS', 'COMPACT', 'IDENTIFIED_DTO'];
 
 export function isJsonEdited(type: DataType | undefined): boolean {
   return type !== undefined && JSON_EDITED_TYPES.includes(type);

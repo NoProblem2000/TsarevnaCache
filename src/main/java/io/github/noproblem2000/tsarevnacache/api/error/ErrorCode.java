@@ -36,6 +36,12 @@ public enum ErrorCode {
     SCHEMA_INVALID(HttpStatus.BAD_REQUEST),
     /** A {@code keyRef} is not a valid serialized key. */
     INVALID_KEY_REF(HttpStatus.BAD_REQUEST),
+    /** A dynamic DTO schema is inconsistent (missing class id, duplicate fields, ...). */
+    DTO_SCHEMA_INVALID(HttpStatus.BAD_REQUEST),
+    /** No dynamic DTO schema is registered for the requested class. */
+    DTO_SCHEMA_NOT_FOUND(HttpStatus.NOT_FOUND),
+    /** The pasted Java source does not contain what is needed (class, factory, readData/writeData). */
+    DTO_SOURCE_NOT_RECOGNIZED(HttpStatus.BAD_REQUEST),
     /** A paging cursor is malformed or does not belong to this cluster. */
     INVALID_CURSOR(HttpStatus.BAD_REQUEST),
     /** The SQL predicate cannot be parsed or evaluated. */

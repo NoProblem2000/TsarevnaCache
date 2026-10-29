@@ -98,8 +98,10 @@ function InspectorBody({ mapName, entry, onDeleted }: { mapName: string; entry: 
         keyRef: entry.keyRef,
         value: parsed.value,
         valueType: value.dataType,
-        valueClassName: value.dataType === 'CLASS' ? value.javaType : undefined,
+        valueClassName: value.dataType === 'CLASS' || value.dataType === 'IDENTIFIED_DTO' ? value.javaType : undefined,
         valueSchema: value.dataType === 'COMPACT' ? value.schema : undefined,
+        valueFactoryId: value.dataType === 'IDENTIFIED_DTO' ? numberMeta(value, 'factoryId') : undefined,
+        valueClassId: value.dataType === 'IDENTIFIED_DTO' ? numberMeta(value, 'classId') : undefined,
         ttlSeconds: ttlParsed.value,
       };
       const saved = await endpoints.maps.put(mapName, request);
@@ -258,6 +260,12 @@ function InspectorBody({ mapName, entry, onDeleted }: { mapName: string; entry: 
       />
     </div>
   );
+}
+
+/** Numeric metadata of an inspected value (e.g. the factory/class id of an IDENTIFIED_DTO). */
+function numberMeta(value: InspectedValue, key: string): number | undefined {
+  const raw = value.metadata?.[key];
+  return typeof raw === 'number' ? raw : undefined;
 }
 
 function Section({ title, actions, children }: { title: string; actions?: ReactNode; children: ReactNode }) {

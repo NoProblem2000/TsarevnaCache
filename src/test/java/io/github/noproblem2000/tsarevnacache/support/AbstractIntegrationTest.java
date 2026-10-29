@@ -1,5 +1,9 @@
 package io.github.noproblem2000.tsarevnacache.support;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -13,6 +17,17 @@ public abstract class AbstractIntegrationTest {
     protected static final String ADMIN_USER = "admin";
     protected static final String ADMIN_PASSWORD = "test-secret";
 
+    /** DTO schema registry of the test application (never the developer's {@code ./config}). */
+    protected static final Path DTO_SCHEMAS_FILE = tempDirectory().resolve("dto-schemas.json");
+
+    private static Path tempDirectory() {
+        try {
+            return Files.createTempDirectory("tsarevna-schemas");
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     @DynamicPropertySource
     static void clusterProperties(DynamicPropertyRegistry registry) {
         EmbeddedCluster cluster = EmbeddedCluster.get();
@@ -22,6 +37,7 @@ public abstract class AbstractIntegrationTest {
         registry.add("admin.hazelcast.async-start", () -> "false");
         registry.add("admin.security.username", () -> ADMIN_USER);
         registry.add("admin.security.password", () -> ADMIN_PASSWORD);
+        registry.add("admin.dto-schemas.file", () -> DTO_SCHEMAS_FILE.toString());
     }
 
     protected EmbeddedCluster cluster() {

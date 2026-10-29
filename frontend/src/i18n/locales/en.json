@@ -50,7 +50,8 @@
     "language": "Language",
     "logout": "Log out",
     "members_one": "{{count}} member",
-    "members_other": "{{count}} members"
+    "members_other": "{{count}} members",
+    "version": "Version {{version}}"
   },
   "sidebar": {
     "overview": "Cluster Overview",
@@ -340,7 +341,8 @@
     "ARRAY": "Array",
     "BYTES": "Bytes",
     "DATE_TIME": "Date/Time",
-    "UNRESOLVED": "Unresolved"
+    "UNRESOLVED": "Unresolved",
+    "IDENTIFIED_DTO": "DTO (IdentifiedDataSerializable)"
   },
   "dataTypes": {
     "STRING": "String",
@@ -356,7 +358,8 @@
     "BIG_INTEGER": "BigInteger",
     "JSON": "JSON (HazelcastJsonValue)",
     "CLASS": "Custom class",
-    "COMPACT": "Compact record"
+    "COMPACT": "Compact record",
+    "IDENTIFIED_DTO": "Schema DTO (IdentifiedDataSerializable)"
   },
   "errors": {
     "AUTH_REQUIRED": "Please sign in to continue.",
@@ -388,7 +391,10 @@
     "CLUSTER_TIMEOUT": "The cluster did not answer in time.",
     "INTERNAL_ERROR": "Unexpected server error.",
     "NETWORK_ERROR": "The admin service is not reachable.",
-    "UNKNOWN": "Something went wrong."
+    "UNKNOWN": "Something went wrong.",
+    "DTO_SCHEMA_INVALID": "The DTO schema is invalid.",
+    "DTO_SCHEMA_NOT_FOUND": "No DTO schema is registered for this class.",
+    "DTO_SOURCE_NOT_RECOGNIZED": "Nothing usable for a schema was found in the Java source."
   },
   "deserialization": {
     "CLASS_NOT_FOUND": "The class of this object is not on the admin classpath.",
@@ -397,7 +403,8 @@
     "PORTABLE_FACTORY_MISSING": "No PortableFactory or class definition is available for this object.",
     "CUSTOM_SERIALIZER_MISSING": "The object was written by a custom serializer that is not registered.",
     "COMPACT_SCHEMA_UNAVAILABLE": "The Compact schema could not be fetched from the cluster.",
-    "DESERIALIZATION_ERROR": "The object could not be deserialized."
+    "DESERIALIZATION_ERROR": "The object could not be deserialized.",
+    "DTO_SCHEMA_MISSING": "No DTO schema is registered for this factoryId/classId. Add it to the schema registry."
   },
   "notFound": {
     "title": "Page not found",

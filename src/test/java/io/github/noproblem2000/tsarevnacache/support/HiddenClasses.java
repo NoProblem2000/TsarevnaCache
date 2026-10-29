@@ -152,7 +152,9 @@ public final class HiddenClasses {
                     "-d", classes.toString(),
                     "-classpath", hazelcastJar(),
                     "-nowarn", "-Xlint:none", "-proc:none"));
-            for (Map.Entry<String, String> source : SOURCES.entrySet()) {
+            Map<String, String> allSources = new java.util.HashMap<>(SOURCES);
+            allSources.putAll(ProductionDtoSources.ALL);
+            for (Map.Entry<String, String> source : allSources.entrySet()) {
                 Path file = sources.resolve(source.getKey());
                 Files.createDirectories(file.getParent());
                 Files.writeString(file, source.getValue());

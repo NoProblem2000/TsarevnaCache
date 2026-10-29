@@ -27,5 +27,11 @@ public enum DataType {
     CLASS,
 
     /** Stored as a Compact {@code GenericRecord} built from JSON and a {@link RecordSchemaDTO}. */
-    COMPACT
+    COMPACT,
+
+    /**
+     * {@code IdentifiedDataSerializable} DTO described by a dynamic schema ({@code config/dto-schemas.json});
+     * written without its class. Selected by class id or by DTO class name.
+     */
+    IDENTIFIED_DTO
 }

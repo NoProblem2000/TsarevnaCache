@@ -24,6 +24,9 @@ import io.github.noproblem2000.tsarevnacache.api.dto.UnresolvedObjectDTO;
 import io.github.noproblem2000.tsarevnacache.api.dto.ValueKind;
 import io.github.noproblem2000.tsarevnacache.config.DtoClassLoader;
 import io.github.noproblem2000.tsarevnacache.config.properties.InspectorProperties;
+import io.github.noproblem2000.tsarevnacache.dto.DtoClassSchema;
+import io.github.noproblem2000.tsarevnacache.dto.DtoSchemaRegistryService;
+import io.github.noproblem2000.tsarevnacache.dto.DynamicDtoRecord;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.temporal.Temporal;
@@ -62,16 +65,18 @@ public class HazelcastValueInspectorService {
     private final InspectorProperties properties;
     private final ObjectMapper mapper;
     private final TypedValueParser parser;
-    private final UnresolvedDataAnalyzer analyzer = new UnresolvedDataAnalyzer();
+    private final UnresolvedDataAnalyzer analyzer;
     private volatile InternalSerializationService serializationService;
 
     public HazelcastValueInspectorService(HazelcastInstance hazelcastClient,
                                           DtoClassLoader dtoClassLoader,
-                                          InspectorProperties properties) {
+                                          InspectorProperties properties,
+                                          DtoSchemaRegistryService dtoSchemaRegistry) {
         this.hazelcast = hazelcastClient;
         this.properties = properties;
         this.mapper = InspectorObjectMapperFactory.create();
-        this.parser = new TypedValueParser(mapper, dtoClassLoader, properties.getDeniedClassPrefixes());
+        this.parser = new TypedValueParser(mapper, dtoClassLoader, properties.getDeniedClassPrefixes(), dtoSchemaRegistry);
+        this.analyzer = new UnresolvedDataAnalyzer(dtoSchemaRegistry);
     }
 
     // ------------------------------------------------------------------ reading
@@ -107,6 +112,13 @@ public class HazelcastValueInspectorService {
         }
         if (value == null) {
             return resolved(ValueKind.NULL, null, null, NullNode.getInstance()).build();
+        }
+        if (value instanceof DynamicDtoRecord dto) {
+            DtoClassSchema schema = dto.schema();
+            return resolved(ValueKind.IDENTIFIED_DTO, schema.className(), DataType.IDENTIFIED_DTO, toJson(value))
+                    .metadata(Map.of("factoryId", dto.getFactoryId(), "classId", dto.getClassId(),
+                            "className", schema.className()))
+                    .build();
         }
         if (value instanceof GenericRecord record) {
             boolean compact = GenericRecordSupport.isCompact(record);

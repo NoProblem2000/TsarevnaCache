@@ -46,7 +46,7 @@ describe('locales', () => {
   });
 
   it('every deserialization error code is translated', () => {
-    expect(DESERIALIZATION_CODES.length).toBe(7);
+    expect(DESERIALIZATION_CODES.length).toBe(8);
     for (const code of DESERIALIZATION_CODES) {
       expect((en as Tree & { deserialization: Record<string, string> }).deserialization[code], code).toBeTruthy();
       expect((ru as Tree & { deserialization: Record<string, string> }).deserialization[code], code).toBeTruthy();

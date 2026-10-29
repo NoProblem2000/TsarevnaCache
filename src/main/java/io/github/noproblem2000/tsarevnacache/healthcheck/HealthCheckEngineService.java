@@ -13,6 +13,7 @@ import io.github.noproblem2000.tsarevnacache.api.dto.StructuresDTO;
 import io.github.noproblem2000.tsarevnacache.api.dto.UnresolvedObjectDTO;
 import io.github.noproblem2000.tsarevnacache.config.properties.HealthCheckProperties;
 import io.github.noproblem2000.tsarevnacache.dto.DtoSchemaRegistryService;
+import io.github.noproblem2000.tsarevnacache.dto.DtoSchemasChangedEvent;
 import io.github.noproblem2000.tsarevnacache.hazelcast.ClientAccess;
 import io.github.noproblem2000.tsarevnacache.healthcheck.ClusterSnapshot.MapSnapshot;
 import io.github.noproblem2000.tsarevnacache.healthcheck.ClusterSnapshot.MissingDto;
@@ -33,16 +34,23 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import lombok.extern.slf4j.Slf4j;
+import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 /**
  * Automated healthcheck: collects member metrics, structure sizes and a sample of every large map,
  * evaluates {@link HealthCheckRules} and keeps the latest result. Runs every
- * {@code admin.healthcheck.interval-ms} (one minute by default) and on demand.
+ * {@code admin.healthcheck.interval-ms} (one minute by default), on demand and right after a DTO
+ * schema change.
  */
 @Slf4j
 @Service
@@ -59,6 +67,12 @@ public class HealthCheckEngineService {
     private final ReentrantLock running = new ReentrantLock();
 
     private volatile Run latest;
+    private volatile CompletableFuture<Void> pendingRefresh;
+    private final ExecutorService refresher = Executors.newSingleThreadExecutor(task -> {
+        Thread thread = new Thread(task, "healthcheck-refresh");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     @Autowired
     public HealthCheckEngineService(ClientAccess clientAccess, StructureRegistryService structures,
@@ -100,6 +114,32 @@ public class HealthCheckEngineService {
         }
     }
 
+    /**
+     * A DTO schema was saved, deleted or imported: values may have become readable, so the checks
+     * run again at once (in the background, so the schema request is not slowed down). Until the
+     * refresh is done {@link #report()} waits for it, so a report requested right after the change
+     * already reflects it. Nothing happens before the first run.
+     */
+    @EventListener
+    public void onDtoSchemasChanged(DtoSchemasChangedEvent event) {
+        if (latest == null) {
+            return;
+        }
+        log.debug("Refreshing the healthcheck: {}", event.reason());
+        pendingRefresh = CompletableFuture.runAsync(() -> {
+            try {
+                runChecks();
+            } catch (RuntimeException e) {
+                log.warn("Healthcheck refresh after a schema change failed: {}", e.toString());
+            }
+        }, refresher);
+    }
+
+    @PreDestroy
+    void stopRefresher() {
+        refresher.shutdownNow();
+    }
+
     /** Runs all checks now (waits for a run that is already in progress) and returns the report. */
     public HealthCheckReport runChecks() {
         running.lock();
@@ -108,13 +148,28 @@ public class HealthCheckEngineService {
         } finally {
             running.unlock();
         }
-        return report();
+        return toReport(latest);
     }
 
     /** Latest report; the first call runs the checks. The ignore list is applied on every call. */
     public HealthCheckReport report() {
+        awaitPendingRefresh();
         Run run = latest;
         return run == null ? runChecks() : toReport(run);
+    }
+
+    private void awaitPendingRefresh() {
+        CompletableFuture<Void> pending = pendingRefresh;
+        if (pending == null || pending.isDone()) {
+            return;
+        }
+        try {
+            pending.get(30, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            log.debug("Not waiting for the healthcheck refresh any longer: {}", e.toString());
+        }
     }
 
     /** Latest run, empty before the first one. */

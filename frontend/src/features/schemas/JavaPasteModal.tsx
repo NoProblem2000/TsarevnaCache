@@ -63,16 +63,26 @@ export function JavaPasteModal({ open, initialMode, target, onClose, onAnalyzed,
   const [error, setError] = useState<unknown>(null);
   const [factoryResult, setFactoryResult] = useState<FactoryParseResult | null>(null);
 
+  // every open starts clean: no source, result or error of a previously parsed class survives
+  // (the page also remounts the dialog per open)
   useEffect(() => {
     if (open) {
       setMode(initialMode);
+      setSources({ factory: '', dto: '' });
       setError(null);
       setFactoryResult(null);
     }
   }, [open, initialMode]);
 
   const source = sources[mode];
-  const setSource = (value: string) => setSources((current) => ({ ...current, [mode]: value }));
+  const setSource = (value: string) => {
+    setSources((current) => ({ ...current, [mode]: value }));
+    if (value.trim() === '') {
+      // cleared input: forget what was parsed from the previous text
+      setError(null);
+      setFactoryResult(null);
+    }
+  };
 
   const close = () => {
     if (!busy) {

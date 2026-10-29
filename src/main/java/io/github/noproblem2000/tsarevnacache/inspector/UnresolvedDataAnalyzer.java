@@ -12,6 +12,8 @@ import com.hazelcast.internal.serialization.Data;
 import com.hazelcast.internal.serialization.impl.HeapData;
 import io.github.noproblem2000.tsarevnacache.api.dto.DeserializationErrorCode;
 import io.github.noproblem2000.tsarevnacache.api.dto.UnresolvedObjectDTO;
+import io.github.noproblem2000.tsarevnacache.dto.DtoFieldReadException;
+import io.github.noproblem2000.tsarevnacache.dto.DtoSchemaMissingException;
 import io.github.noproblem2000.tsarevnacache.dto.DtoSchemaRegistryService;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -20,11 +22,15 @@ import java.io.InvalidClassException;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 
 /**
@@ -98,6 +104,12 @@ final class UnresolvedDataAnalyzer {
         InvalidClassException invalidClass = find(error, InvalidClassException.class);
         String messages = allMessages(error);
 
+        DtoSchemaMissingException missingSchema = find(error, DtoSchemaMissingException.class);
+        List<DtoFieldReadException> fieldPath = all(error, DtoFieldReadException.class);
+        if (missingSchema != null || !fieldPath.isEmpty()) {
+            return analyzeDynamicDto(data, error, typeId, metadata, missingSchema, fieldPath);
+        }
+
         DeserializationErrorCode code;
         String missingClass = null;
         if (notFound != null || noClassDef != null) {
@@ -146,6 +158,78 @@ final class UnresolvedDataAnalyzer {
                 .serializedSize(data.totalSize())
                 .metadata(metadata)
                 .build();
+    }
+
+    /**
+     * Failure inside the dynamic DTO engine, explained from the exact exceptions it threw instead of
+     * the top-level header (which names the root DTO even when a nested one is the problem):
+     * <ul>
+     *   <li>a {@link DtoSchemaMissingException} in the chain: the class it names (root or nested)
+     *       has no schema - {@code DTO_SCHEMA_MISSING} with that factory id / class id;</li>
+     *   <li>otherwise the innermost {@link DtoFieldReadException}: all schemas exist, but the
+     *       layout of that class does not match the bytes - {@code DTO_FIELD_READ_ERROR}.</li>
+     * </ul>
+     */
+    private UnresolvedObjectDTO analyzeDynamicDto(Data data, Throwable error, int typeId, Map<String, Object> metadata,
+                                                  DtoSchemaMissingException missingSchema,
+                                                  List<DtoFieldReadException> fieldPath) {
+        Integer rootFactoryId = metadata.get("factoryId") instanceof Integer id ? id : null;
+        Integer rootClassId = metadata.get("classId") instanceof Integer id ? id : null;
+        if (rootFactoryId == null && !fieldPath.isEmpty()) {
+            rootFactoryId = fieldPath.get(0).factoryId();
+            rootClassId = fieldPath.get(0).classId();
+        }
+        if (rootFactoryId != null && rootClassId != null) {
+            metadata.put("rootFactoryId", rootFactoryId);
+            metadata.put("rootClassId", rootClassId);
+            className(rootFactoryId, rootClassId).ifPresent(name -> metadata.put("rootClassName", name));
+        }
+        if (!fieldPath.isEmpty()) {
+            metadata.put("fieldPath", fieldPath.stream().map(DtoFieldReadException::fieldPath).collect(Collectors.joining(" > ")));
+        }
+
+        DeserializationErrorCode code;
+        String missingClass = null;
+        String reason;
+        if (missingSchema != null) {
+            code = DeserializationErrorCode.DTO_SCHEMA_MISSING;
+            int factoryId = missingSchema.factoryId();
+            int classId = missingSchema.classId();
+            String name = missingSchema.className() != null ? missingSchema.className() : className(factoryId, classId).orElse(null);
+            metadata.put("missingFactoryId", factoryId);
+            metadata.put("missingClassId", classId);
+            if (name != null) {
+                metadata.put("missingClassName", name);
+            }
+            metadata.put("nested", rootFactoryId != null && rootClassId != null
+                    && (rootFactoryId != factoryId || rootClassId != classId));
+            missingClass = (name == null ? "" : name + " ") + "(factoryId=" + factoryId + ", classId=" + classId + ")";
+            reason = fieldPath.isEmpty() ? missingSchema.getMessage() : fieldPath.get(0).getMessage();
+        } else {
+            code = DeserializationErrorCode.DTO_FIELD_READ_ERROR;
+            DtoFieldReadException failed = fieldPath.get(fieldPath.size() - 1);
+            metadata.put("failedFactoryId", failed.factoryId());
+            metadata.put("failedClassId", failed.classId());
+            metadata.put("failedClassName", failed.className());
+            metadata.put("fieldOrder", failed.fieldOrder());
+            metadata.put("fieldName", failed.fieldName());
+            metadata.put("fieldType", failed.fieldType().name());
+            metadata.put("fieldError", failed.originalMessage());
+            reason = failed.getMessage();
+        }
+        return UnresolvedObjectDTO.builder()
+                .errorCode(code)
+                .reason(reason == null ? describe(error) : reason)
+                .missingClass(missingClass)
+                .typeId(typeId)
+                .serializer(serializerName(typeId))
+                .serializedSize(data.totalSize())
+                .metadata(metadata)
+                .build();
+    }
+
+    private Optional<String> className(int factoryId, int classId) {
+        return dtoSchemas == null ? Optional.empty() : dtoSchemas.classNameFor(factoryId, classId);
     }
 
     /** Human readable name of the serializer family that produced a binary. */
@@ -297,6 +381,20 @@ final class UnresolvedDataAnalyzer {
             }
         }
         return null;
+    }
+
+    /** All exceptions of a type in the cause chain, outermost first. */
+    private static <T extends Throwable> List<T> all(Throwable error, Class<T> type) {
+        List<T> found = new ArrayList<>();
+        for (Throwable current = error; current != null; current = current.getCause()) {
+            if (type.isInstance(current)) {
+                found.add(type.cast(current));
+            }
+            if (current.getCause() == current) {
+                break;
+            }
+        }
+        return found;
     }
 
     private static String allMessages(Throwable error) {

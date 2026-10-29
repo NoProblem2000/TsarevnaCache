@@ -107,7 +107,8 @@ export type DeserializationErrorCode =
   | 'CUSTOM_SERIALIZER_MISSING'
   | 'COMPACT_SCHEMA_UNAVAILABLE'
   | 'DESERIALIZATION_ERROR'
-  | 'DTO_SCHEMA_MISSING';
+  | 'DTO_SCHEMA_MISSING'
+  | 'DTO_FIELD_READ_ERROR';
 
 export type FieldKind = string;
 
@@ -482,6 +483,10 @@ export interface DtoSaveResult {
   schema: DtoClassSchema;
   /** The factory id is not served by the running client yet: restart the service. */
   restartRequired: boolean;
+  /** Keys (`factoryId:classId`) of other schemas whose nested fields now point to this class. */
+  linkedSchemas?: string[];
+  /** Things to check, e.g. the same class registered under another class id. */
+  warnings?: string[];
 }
 
 // ---------------------------------------------------------------- healthcheck

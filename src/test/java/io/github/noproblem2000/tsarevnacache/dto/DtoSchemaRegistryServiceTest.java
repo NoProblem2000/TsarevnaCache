@@ -53,13 +53,80 @@ class DtoSchemaRegistryServiceTest {
     }
 
     @Test
-    void renumberedClassReplacesItsOldId() {
+    void schemasAreKeyedStrictlyByFactoryAndClassId() {
         DtoSchemaRegistryService registry = open();
         registry.save(schema(1, "Order"));
-        registry.save(schema(5, "Order"));
-        assertThat(registry.list()).extracting(DtoClassSchema::classId).containsExactly(5);
+        DtoSchemaRegistryService.SaveOutcome again = registry.saveDetailed(schema(5, "Order"));
+        assertThat(registry.list()).extracting(DtoClassSchema::classId).containsExactly(1, 5);
+        assertThat(again.warnings()).singleElement().asString().contains("also registered with classId 1");
         assertThat(registry.delete(1, 5)).isTrue();
         assertThat(registry.delete(1, 5)).isFalse();
+        assertThat(registry.find(1, 1)).isPresent();
+        assertThat(new DtoClassSchema.SchemaKey(1, 5)).hasToString("1:5");
+    }
+
+    @Test
+    void manySchemasAddedOneByOneAreAllKeptAndDeletingThemKeepsTheFactory() {
+        DtoSchemaRegistryService registry = open();
+        Map<String, Integer> constants = new java.util.LinkedHashMap<>();
+        for (int id = 1; id <= 12; id++) {
+            constants.put("DTO" + id, id);
+        }
+        registry.updateFactory(1, constants, Map.of());
+        for (int id = 12; id >= 1; id--) {
+            registry.save(schema(id, "Dto" + id, field(0, "value", DtoFieldType.NULLABLE_STRING, null)));
+        }
+        assertThat(registry.list()).hasSize(12);
+        assertThat(open().list()).hasSize(12);
+        for (int id = 1; id <= 12; id++) {
+            assertThat(registry.delete(1, id)).isTrue();
+        }
+        DtoSchemaRegistryService reloaded = open();
+        assertThat(reloaded.list()).isEmpty();
+        assertThat(reloaded.factoryConstants()).hasSize(12).containsEntry("DTO7", 7);
+    }
+
+    @Test
+    void nestedClassIdIsLinkedWhateverTheOrderOfAdding() {
+        DtoSchemaRegistryService registry = open();
+        registry.save(schema(1, "Parent", field(0, "child", DtoFieldType.NULLABLE_OBJECT, "Child"),
+                field(1, "children", DtoFieldType.NULLABLE_LIST, "Child")));
+        assertThat(registry.find(1, 1).orElseThrow().fields()).extracting(DtoFieldSchema::nestedClassId)
+                .containsOnlyNulls();
+
+        DtoSchemaRegistryService.SaveOutcome child = registry.saveDetailed(schema(7, "Child"));
+        assertThat(child.linked()).containsExactly(new DtoClassSchema.SchemaKey(1, 1));
+        assertThat(registry.find(1, 1).orElseThrow().fields()).extracting(DtoFieldSchema::nestedClassId)
+                .containsExactly(7, 7);
+        assertThat(open().find(1, 1).orElseThrow().fields().get(0).nestedClassId()).isEqualTo(7);
+    }
+
+    @Test
+    void namesAreMatchedWithoutCaseAndUnderscores() {
+        DtoSchemaRegistryService registry = open();
+        registry.updateFactory(1, Map.of("SOMEDTO", 1, "SOME_OTHER_DTO", 3, "SOMEDTO2", 2), Map.of("Some2DTO", 2));
+        assertThat(registry.resolveConstant("SomeDTO")).contains(1);
+        assertThat(registry.resolveConstant("SOMEDTO2")).contains(2);
+        assertThat(registry.resolveClassId("SomeDTO")).contains(1);
+        assertThat(registry.resolveClassId("SomeOtherDto")).contains(3);
+        assertThat(registry.resolveClassId("Some2DTO")).contains(2);
+        assertThat(registry.resolveClassId("Unknown")).isEmpty();
+        assertThat(DtoSchemaRegistryService.normalize("Some_DTO")).isEqualTo("somedto");
+    }
+
+    @Test
+    void importingSchemasOnlyKeepsTheFactoryMapping() {
+        DtoSchemaRegistryService registry = open();
+        registry.updateFactory(4, Map.of("ORDER", 2), Map.of("Order", 2));
+        registry.save(schema(9, "Old"));
+        registry.importFile(new DtoSchemaRegistryFile(1, 4, Map.of(), Map.of(), List.of(schema(2, "Order"))), true);
+        assertThat(registry.list()).extracting(DtoClassSchema::className).containsExactly("Order");
+        assertThat(registry.factoryId()).isEqualTo(4);
+        assertThat(registry.factoryConstants()).containsEntry("ORDER", 2);
+
+        registry.importFile(new DtoSchemaRegistryFile(1, 6, Map.of("X", 1), Map.of(), List.of()), true);
+        assertThat(registry.factoryId()).isEqualTo(6);
+        assertThat(registry.factoryConstants()).containsOnlyKeys("X");
     }
 
     @Test

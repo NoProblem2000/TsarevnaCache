@@ -16,6 +16,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -27,6 +28,17 @@ import org.springframework.stereotype.Service;
 
 /**
  * Registry of dynamic DTO schemas, persisted in {@code config/dto-schemas.json}.
+ *
+ * <p>The file holds two independent parts: the factory mapping parsed from
+ * {@code DataSerializableFactory.java} ({@code factoryId}, {@code factoryConstants},
+ * {@code factoryClasses}) and the class schemas. Schemas are stored strictly under
+ * {@code factoryId:classId}; adding, replacing or deleting schemas never touches the factory
+ * mapping, and parsing the factory never touches the schemas (it only links their nested classes).
+ *
+ * <p>Nested DTO references ({@code NULLABLE_OBJECT} / {@code NULLABLE_LIST} fields with a
+ * {@code nestedClassName}) are linked independently of the order in which schemas are added: every
+ * change re-resolves the {@code nestedClassId} of all schemas from the registered schemas and the
+ * factory mapping.
  *
  * <p>Loaded once on start (an empty registry with factory id {@code 1} when the file does not
  * exist). Every change is validated and written back to the file atomically. Reads are lock-free
@@ -48,7 +60,16 @@ public class DtoSchemaRegistryService {
         this.file = Path.of(properties.getFile()).toAbsolutePath().normalize();
         this.mapper = objectMapper.copy().enable(SerializationFeature.INDENT_OUTPUT);
         this.snapshot = Snapshot.of(load());
-        log.info("DTO schema registry {}: {} schema(s), factory id {}", file, snapshot.schemas.size(), snapshot.factoryId);
+        log.info("DTO schema registry {}: {} schema(s), factory id {}, {} factory constant(s)", file,
+                snapshot.schemas.size(), snapshot.factoryId, snapshot.factoryConstants.size());
+    }
+
+    /**
+     * Name used to match class names and factory constants regardless of case and underscores:
+     * {@code SOME_DTO}, {@code SOMEDTO} and {@code SomeDTO} all become {@code somedto}.
+     */
+    public static String normalize(String name) {
+        return name == null ? "" : name.trim().toLowerCase(Locale.ROOT).replace("_", "");
     }
 
     // ------------------------------------------------------------------ queries
@@ -58,13 +79,9 @@ public class DtoSchemaRegistryService {
         return Optional.ofNullable(snapshot.schemas.get(new SchemaKey(factoryId, classId)));
     }
 
-    /** First schema with the given simple class name. */
+    /** First schema with the given simple class name (exact match first, then case/underscore insensitive). */
     public Optional<DtoClassSchema> findByClassName(String className) {
-        if (className == null) {
-            return Optional.empty();
-        }
-        String name = simpleName(className);
-        return snapshot.schemas.values().stream().filter(schema -> schema.className().equals(name)).findFirst();
+        return findByClassName(snapshot, className, null);
     }
 
     /** All schemas, ordered by factory id and class id. */
@@ -85,25 +102,34 @@ public class DtoSchemaRegistryService {
         return snapshot.factoryClasses;
     }
 
-    /** Class id for a class name: from the factory mapping, else from a registered schema. */
+    /**
+     * Class id for a class name: from the factory mapping ({@code case X -> new SomeDTO()}), then a
+     * factory constant with the same normalized name ({@code SOMEDTO} for {@code SomeDTO}), then a
+     * registered schema of the project factory.
+     */
     public Optional<Integer> resolveClassId(String className) {
-        if (className == null || className.isBlank()) {
+        return resolveClassId(snapshot, className);
+    }
+
+    /**
+     * Class id for a factory constant such as {@code SOMEDTO}; matched exactly, then without regard
+     * to case and underscores ({@code DataSerializableFactory.SomeDTO}), then against the class
+     * names of the factory mapping.
+     */
+    public Optional<Integer> resolveConstant(String constant) {
+        if (constant == null || constant.isBlank()) {
             return Optional.empty();
         }
-        String name = simpleName(className);
-        Integer fromFactory = snapshot.factoryClasses.get(name);
-        if (fromFactory != null) {
-            return Optional.of(fromFactory);
+        Snapshot current = snapshot;
+        Integer exact = current.factoryConstants.get(constant.trim());
+        if (exact != null) {
+            return Optional.of(exact);
         }
-        return findByClassName(name).map(DtoClassSchema::classId);
+        Optional<Integer> normalized = byNormalizedName(current.factoryConstants, constant);
+        return normalized.isPresent() ? normalized : byNormalizedName(current.factoryClasses, constant);
     }
 
-    /** Class id for a factory constant name such as {@code SOMEDTO}. */
-    public Optional<Integer> resolveConstant(String constant) {
-        return Optional.ofNullable(constant == null ? null : snapshot.factoryConstants.get(constant));
-    }
-
-    /** Class name for a class id of the project's factory, used to name missing schemas. */
+    /** Class name for a class id: from its schema, else from the factory mapping (project factory only). */
     public Optional<String> classNameFor(int factoryId, int classId) {
         Optional<String> fromSchema = find(factoryId, classId).map(DtoClassSchema::className);
         if (fromSchema.isPresent() || factoryId != snapshot.factoryId) {
@@ -156,24 +182,50 @@ public class DtoSchemaRegistryService {
 
     // ------------------------------------------------------------------ changes
 
-    /** Adds or replaces a schema (same factory id + class id) and saves the file. */
+    /** Adds or replaces the schema stored under its {@code factoryId:classId} and saves the file. */
     public DtoClassSchema save(DtoClassSchema schema) {
+        return saveDetailed(schema).schema();
+    }
+
+    /**
+     * Adds or replaces the schema stored under its {@code factoryId:classId}, links nested class
+     * references in both directions and saves the file. Other schemas are never removed, even when
+     * they use the same class name.
+     */
+    public SaveOutcome saveDetailed(DtoClassSchema schema) {
         DtoClassSchema validated = validate(schema);
         lock.writeLock().lock();
         try {
-            Map<SchemaKey, DtoClassSchema> schemas = new TreeMap<>(snapshot.schemas);
-            schemas.values().removeIf(existing -> existing.className().equals(validated.className())
-                    && existing.factoryId().equals(validated.factoryId())
-                    && !existing.classId().equals(validated.classId()));
+            Snapshot current = snapshot;
+            Map<SchemaKey, DtoClassSchema> schemas = new TreeMap<>(current.schemas);
             schemas.put(validated.key(), validated);
-            replace(new Snapshot(snapshot.factoryId, snapshot.factoryConstants, snapshot.factoryClasses, schemas));
-            return validated;
+            Snapshot next = current.withSchemas(schemas);
+            Map<SchemaKey, DtoClassSchema> linked = linkNested(next);
+            next = next.withSchemas(linked);
+
+            List<SchemaKey> updated = new ArrayList<>();
+            for (Map.Entry<SchemaKey, DtoClassSchema> entry : linked.entrySet()) {
+                DtoClassSchema before = current.schemas.get(entry.getKey());
+                if (!entry.getKey().equals(validated.key()) && before != null && !before.equals(entry.getValue())) {
+                    updated.add(entry.getKey());
+                }
+            }
+            List<String> warnings = new ArrayList<>();
+            for (DtoClassSchema other : current.schemas.values()) {
+                if (!other.key().equals(validated.key()) && other.factoryId().equals(validated.factoryId())
+                        && other.className().equals(validated.className())) {
+                    warnings.add("Class " + validated.className() + " is also registered with classId " + other.classId()
+                            + "; delete that schema if the class was renumbered");
+                }
+            }
+            replace(next);
+            return new SaveOutcome(linked.get(validated.key()), updated, warnings);
         } finally {
             lock.writeLock().unlock();
         }
     }
 
-    /** Removes a schema; {@code false} when it did not exist. */
+    /** Removes a schema; {@code false} when it did not exist. The factory mapping is kept. */
     public boolean delete(int factoryId, int classId) {
         lock.writeLock().lock();
         try {
@@ -181,7 +233,7 @@ public class DtoSchemaRegistryService {
             if (schemas.remove(new SchemaKey(factoryId, classId)) == null) {
                 return false;
             }
-            replace(new Snapshot(snapshot.factoryId, snapshot.factoryConstants, snapshot.factoryClasses, schemas));
+            replace(snapshot.withSchemas(schemas));
             return true;
         } finally {
             lock.writeLock().unlock();
@@ -189,19 +241,14 @@ public class DtoSchemaRegistryService {
     }
 
     /**
-     * Replaces the factory mapping (parsed from {@code DataSerializableFactory.java}) and fills in
-     * missing nested class ids of existing schemas.
+     * Replaces the factory mapping (parsed from {@code DataSerializableFactory.java}) and links the
+     * nested class references of the existing schemas. The schemas themselves are kept.
      */
     public void updateFactory(int factoryId, Map<String, Integer> constants, Map<String, Integer> classes) {
         lock.writeLock().lock();
         try {
-            Map<String, Integer> classMap = new LinkedHashMap<>(classes);
-            Map<SchemaKey, DtoClassSchema> schemas = new TreeMap<>();
-            for (DtoClassSchema schema : snapshot.schemas.values()) {
-                DtoClassSchema resolved = schema.factoryId() == factoryId ? resolveNested(schema, classMap) : schema;
-                schemas.put(resolved.key(), resolved);
-            }
-            replace(new Snapshot(factoryId, new LinkedHashMap<>(constants), classMap, schemas));
+            Snapshot next = new Snapshot(factoryId, new LinkedHashMap<>(constants), new LinkedHashMap<>(classes), snapshot.schemas);
+            replace(next.withSchemas(linkNested(next)));
         } finally {
             lock.writeLock().unlock();
         }
@@ -217,8 +264,10 @@ public class DtoSchemaRegistryService {
     /**
      * Imports a registry file.
      *
-     * @param replace {@code true}: the file replaces the registry; {@code false}: its schemas and
-     *                factory entries are merged into the registry
+     * @param replace {@code true}: the file's schemas replace all schemas, and its factory mapping
+     *                replaces the current one when the file contains a mapping (a file with schemas only,
+     *                e.g. the export of a single schema, keeps the current factory mapping);
+     *                {@code false}: its schemas and factory entries are merged into the registry
      */
     public DtoSchemaRegistryFile importFile(DtoSchemaRegistryFile content, boolean replace) {
         List<DtoClassSchema> validated = new ArrayList<>();
@@ -227,24 +276,125 @@ public class DtoSchemaRegistryService {
         }
         lock.writeLock().lock();
         try {
-            Map<SchemaKey, DtoClassSchema> schemas = replace ? new TreeMap<>() : new TreeMap<>(snapshot.schemas);
+            Snapshot current = snapshot;
+            Map<SchemaKey, DtoClassSchema> schemas = replace ? new TreeMap<>() : new TreeMap<>(current.schemas);
             validated.forEach(schema -> schemas.put(schema.key(), schema));
-            Map<String, Integer> constants = replace ? new LinkedHashMap<>() : new LinkedHashMap<>(snapshot.factoryConstants);
+            boolean fileHasMapping = !content.factoryConstants().isEmpty() || !content.factoryClasses().isEmpty();
+            boolean replaceMapping = replace && fileHasMapping;
+            Map<String, Integer> constants = replaceMapping ? new LinkedHashMap<>() : new LinkedHashMap<>(current.factoryConstants);
             constants.putAll(content.factoryConstants());
-            Map<String, Integer> classes = replace ? new LinkedHashMap<>() : new LinkedHashMap<>(snapshot.factoryClasses);
+            Map<String, Integer> classes = replaceMapping ? new LinkedHashMap<>() : new LinkedHashMap<>(current.factoryClasses);
             classes.putAll(content.factoryClasses());
-            int factory = replace ? content.factoryId() : snapshot.factoryId;
-            replace(new Snapshot(factory, constants, classes, schemas));
+            int factory = replaceMapping ? content.factoryId() : current.factoryId;
+            Snapshot next = new Snapshot(factory, constants, classes, schemas);
+            replace(next.withSchemas(linkNested(next)));
             return export();
         } finally {
             lock.writeLock().unlock();
         }
     }
 
+    // ------------------------------------------------------------------ nested links
+
+    /**
+     * Resolves {@code nestedClassId} of every nested field from its {@code nestedClassName}: a
+     * registered schema of the same factory with that class name wins, then the factory mapping
+     * (project factory only). A field whose class is not known yet keeps its current id (or none)
+     * and is linked as soon as the class is registered.
+     */
+    private static Map<SchemaKey, DtoClassSchema> linkNested(Snapshot state) {
+        Map<SchemaKey, DtoClassSchema> result = new TreeMap<>();
+        for (DtoClassSchema schema : state.schemas.values()) {
+            List<DtoFieldSchema> fields = new ArrayList<>(schema.fields().size());
+            boolean changed = false;
+            for (DtoFieldSchema field : schema.fields()) {
+                DtoFieldSchema resolved = linkField(state, schema.factoryId(), field);
+                changed |= resolved != field;
+                fields.add(resolved);
+            }
+            result.put(schema.key(), changed
+                    ? new DtoClassSchema(schema.factoryId(), schema.classId(), schema.className(), fields, schema.rawJavaSource())
+                    : schema);
+        }
+        return result;
+    }
+
+    private static DtoFieldSchema linkField(Snapshot state, int factoryId, DtoFieldSchema field) {
+        if (!field.fieldType().hasNestedObjects() || field.nestedClassName() == null || field.nestedClassName().isBlank()) {
+            return field;
+        }
+        String nestedName = simpleName(field.nestedClassName());
+        Integer classId = findByClassName(state, nestedName, factoryId).map(DtoClassSchema::classId).orElse(null);
+        if (classId == null && factoryId == state.factoryId) {
+            classId = resolveFromFactory(state, nestedName).orElse(null);
+        }
+        if (classId == null || classId.equals(field.nestedClassId())) {
+            return field;
+        }
+        return new DtoFieldSchema(field.order(), field.fieldName(), field.fieldType(), classId, field.nestedClassName());
+    }
+
+    // ------------------------------------------------------------------ name resolution
+
+    private static Optional<Integer> resolveClassId(Snapshot state, String className) {
+        if (className == null || className.isBlank()) {
+            return Optional.empty();
+        }
+        String name = simpleName(className);
+        Optional<Integer> fromFactory = resolveFromFactory(state, name);
+        if (fromFactory.isPresent()) {
+            return fromFactory;
+        }
+        return findByClassName(state, name, state.factoryId).map(DtoClassSchema::classId);
+    }
+
+    /** Factory mapping: class name exactly, class name normalized, then a constant with the normalized class name. */
+    private static Optional<Integer> resolveFromFactory(Snapshot state, String className) {
+        Integer exact = state.factoryClasses.get(className);
+        if (exact != null) {
+            return Optional.of(exact);
+        }
+        Optional<Integer> byClass = byNormalizedName(state.factoryClasses, className);
+        return byClass.isPresent() ? byClass : byNormalizedName(state.factoryConstants, className);
+    }
+
+    private static Optional<Integer> byNormalizedName(Map<String, Integer> names, String name) {
+        String wanted = normalize(simpleName(name));
+        if (wanted.isEmpty()) {
+            return Optional.empty();
+        }
+        return names.entrySet().stream()
+                .filter(entry -> normalize(entry.getKey()).equals(wanted))
+                .map(Map.Entry::getValue)
+                .findFirst();
+    }
+
+    /**
+     * Schema by class name (exact first, then normalized).
+     *
+     * @param factoryId only schemas of this factory, or {@code null} for any factory
+     */
+    private static Optional<DtoClassSchema> findByClassName(Snapshot state, String className, Integer factoryId) {
+        if (className == null || className.isBlank()) {
+            return Optional.empty();
+        }
+        String name = simpleName(className);
+        List<DtoClassSchema> candidates = state.schemas.values().stream()
+                .filter(schema -> factoryId == null || schema.factoryId().equals(factoryId))
+                .toList();
+        Optional<DtoClassSchema> exact = candidates.stream().filter(schema -> schema.className().equals(name)).findFirst();
+        if (exact.isPresent()) {
+            return exact;
+        }
+        String wanted = normalize(name);
+        return candidates.stream().filter(schema -> normalize(schema.className()).equals(wanted)).findFirst();
+    }
+
     // ------------------------------------------------------------------ validation
 
     /**
-     * Checks a schema and returns it normalized (fields sorted, nested ids resolved).
+     * Checks a schema and returns it normalized (fields sorted). A missing class id is never
+     * replaced by a default.
      *
      * @throws ApiException with {@link ErrorCode#DTO_SCHEMA_INVALID}
      */
@@ -278,18 +428,7 @@ public class DtoSchemaRegistryService {
                 throw invalid("Duplicate field order " + field.order(), Map.of("order", field.order()));
             }
         }
-        return resolveNested(schema, snapshot.factoryClasses);
-    }
-
-    private static DtoClassSchema resolveNested(DtoClassSchema schema, Map<String, Integer> classes) {
-        List<DtoFieldSchema> fields = schema.fields().stream()
-                .map(field -> field.fieldType().hasNestedObjects() && field.nestedClassId() == null && field.nestedClassName() != null
-                        && classes.containsKey(field.nestedClassName())
-                        ? new DtoFieldSchema(field.order(), field.fieldName(), field.fieldType(),
-                        classes.get(field.nestedClassName()), field.nestedClassName())
-                        : field)
-                .toList();
-        return new DtoClassSchema(schema.factoryId(), schema.classId(), schema.className(), fields, schema.rawJavaSource());
+        return new DtoClassSchema(schema.factoryId(), schema.classId(), schema.className(), schema.fields(), schema.rawJavaSource());
     }
 
     private static ApiException invalid(String message, Map<String, Object> details) {
@@ -340,6 +479,16 @@ public class DtoSchemaRegistryService {
         return dot >= 0 ? trimmed.substring(dot + 1) : trimmed;
     }
 
+    /**
+     * Result of {@link #saveDetailed}.
+     *
+     * @param schema   the stored schema (nested class ids linked)
+     * @param linked   other schemas whose nested class ids were filled in because of this schema
+     * @param warnings things to check, e.g. the same class registered under another class id
+     */
+    public record SaveOutcome(DtoClassSchema schema, List<SchemaKey> linked, List<String> warnings) {
+    }
+
     /** Immutable registry state, swapped atomically on every change. */
     private record Snapshot(int factoryId, Map<String, Integer> factoryConstants, Map<String, Integer> factoryClasses,
                             Map<SchemaKey, DtoClassSchema> schemas) {
@@ -350,10 +499,15 @@ public class DtoSchemaRegistryService {
             schemas = Collections.unmodifiableMap(new TreeMap<>(schemas));
         }
 
+        Snapshot withSchemas(Map<SchemaKey, DtoClassSchema> next) {
+            return new Snapshot(factoryId, factoryConstants, factoryClasses, next);
+        }
+
         static Snapshot of(DtoSchemaRegistryFile content) {
             Map<SchemaKey, DtoClassSchema> schemas = new TreeMap<>();
             content.schemas().forEach(schema -> schemas.put(schema.key(), schema));
-            return new Snapshot(content.factoryId(), content.factoryConstants(), content.factoryClasses(), schemas);
+            Snapshot loaded = new Snapshot(content.factoryId(), content.factoryConstants(), content.factoryClasses(), schemas);
+            return loaded.withSchemas(linkNested(loaded));
         }
     }
 }

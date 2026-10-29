@@ -148,6 +148,14 @@ public class JavaDtoSourceParserService {
         }
         String constant = lastSegment(label);
         Integer id = constant.matches("-?\\d+") ? Integer.valueOf(constant) : constants.get(constant);
+        if (id == null) {
+            String wanted = DtoSchemaRegistryService.normalize(constant);
+            id = constants.entrySet().stream()
+                    .filter(entry -> DtoSchemaRegistryService.normalize(entry.getKey()).equals(wanted))
+                    .map(Map.Entry::getValue)
+                    .findFirst()
+                    .orElse(null);
+        }
         String className = JavaSourceScanner.simpleTypeName(classType);
         if (id == null) {
             warnings.add("Unknown constant '" + label + "' for class " + className);
@@ -169,7 +177,7 @@ public class JavaDtoSourceParserService {
         String code = JavaSourceScanner.stripComments(raw);
         List<String> warnings = new ArrayList<>();
 
-        Matcher classMatcher = CLASS_NAME.matcher(code);
+        Matcher classMatcher = CLASS_NAME.matcher(JavaSourceScanner.blankLiterals(code));
         if (!classMatcher.find()) {
             throw new ApiException(ErrorCode.DTO_SOURCE_NOT_RECOGNIZED, "No class declaration found");
         }
@@ -178,12 +186,15 @@ public class JavaDtoSourceParserService {
         Map<String, Integer> classConstants = new LinkedHashMap<>();
         Map<String, String> declaredTypes = declaredFieldTypes(code, classConstants);
 
+        // 1) the constant returned by getClassId(), 2) the class name created by the factory
+        // (case X -> new SomeDTO()); both matched without regard to case and underscores.
+        // There is no default: an unresolved class id stays null and must be chosen in the UI.
         Integer classId = idFromMethod(code, GET_CLASS_ID, classConstants, warnings, "getClassId()");
         if (classId == null) {
             classId = registry.resolveClassId(className).orElse(null);
             if (classId != null) {
                 warnings.removeIf(warning -> warning.startsWith("getClassId()"));
-                warnings.add("classId taken from the factory mapping of " + className);
+                warnings.add("classId " + classId + " taken from the factory mapping of " + className);
             }
         }
         Integer factoryId = idFromMethod(code, GET_FACTORY_ID, classConstants, new ArrayList<>(), "getFactoryId()");
@@ -246,6 +257,14 @@ public class JavaDtoSourceParserService {
             return registry.factoryId();
         }
         Integer local = classConstants.get(constant);
+        if (local == null) {
+            String wanted = DtoSchemaRegistryService.normalize(constant);
+            local = classConstants.entrySet().stream()
+                    .filter(entry -> DtoSchemaRegistryService.normalize(entry.getKey()).equals(wanted))
+                    .map(Map.Entry::getValue)
+                    .findFirst()
+                    .orElse(null);
+        }
         if (local != null) {
             return local;
         }

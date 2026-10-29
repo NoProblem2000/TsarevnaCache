@@ -97,15 +97,34 @@ export function knownClassNames(registry: DtoRegistryView | undefined): string[]
   return [...names].sort((a, b) => a.localeCompare(b));
 }
 
-/** Class id of a DTO class name (factory mapping first, then the schemas of the same factory). */
+/** Same as the backend: `SOME_DTO`, `SOMEDTO` and `SomeDTO` all match (`somedto`). */
+export function normalizeName(name: string): string {
+  return name.trim().toLowerCase().replace(/_/g, '');
+}
+
+/**
+ * Class id of a DTO class name: a registered schema of the same factory, then the factory mapping
+ * (class name, then a constant with the same normalized name). Ids are compared as numbers.
+ */
 export function resolveClassId(registry: DtoRegistryView | undefined, className: string, factoryId: number): number | undefined {
   if (!registry || !className) {
     return undefined;
   }
-  if (factoryId === registry.factoryId && registry.factoryClasses[className] !== undefined) {
-    return registry.factoryClasses[className];
+  const wanted = normalizeName(className);
+  const sameFactory = registry.schemas.filter((schema) => Number(schema.factoryId) === Number(factoryId));
+  const schema =
+    sameFactory.find((candidate) => candidate.className === className) ??
+    sameFactory.find((candidate) => normalizeName(candidate.className) === wanted);
+  if (schema) {
+    return Number(schema.classId);
   }
-  return registry.schemas.find((schema) => schema.className === className && schema.factoryId === factoryId)?.classId;
+  if (Number(factoryId) !== Number(registry.factoryId)) {
+    return undefined;
+  }
+  const byName = (names: Record<string, number>) =>
+    names[className] ?? Object.entries(names).find(([name]) => normalizeName(name) === wanted)?.[1];
+  const id = byName(registry.factoryClasses) ?? byName(registry.factoryConstants);
+  return id === undefined ? undefined : Number(id);
 }
 
 export type FormProblem =
@@ -172,7 +191,7 @@ export function nestedSchema(
     return undefined;
   }
   if (field.nestedClassId !== undefined && field.nestedClassId !== null) {
-    const byId = registry.schemas.find((schema) => schema.factoryId === factoryId && schema.classId === field.nestedClassId);
+    const byId = registry.schemas.find((schema) => Number(schema.factoryId) === Number(factoryId) && Number(schema.classId) === Number(field.nestedClassId));
     if (byId) {
       return byId;
     }
@@ -180,7 +199,7 @@ export function nestedSchema(
   if (field.nestedClassName) {
     const classId = resolveClassId(registry, field.nestedClassName, factoryId);
     return (
-      registry.schemas.find((schema) => schema.factoryId === factoryId && schema.classId === classId) ??
+      registry.schemas.find((schema) => Number(schema.factoryId) === Number(factoryId) && Number(schema.classId) === classId) ??
       registry.schemas.find((schema) => schema.className === field.nestedClassName)
     );
   }
@@ -271,3 +290,37 @@ export function downloadJson(fileName: string, content: unknown) {
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+/** One class id of the parsed factory: its constant(s), the class it creates and its schema. */
+export interface FactoryRow {
+  classId: number;
+  constants: string[];
+  className?: string;
+  schema?: DtoClassSchema;
+}
+
+/**
+ * Rows of the factory panel, one per class id. The schema status is matched strictly by number
+ * (`factoryId` and `classId`), never by the spelling of the constant or class name, so a schema
+ * added from the map browser or Smart Java Paste shows as registered right away.
+ */
+export function factoryRows(registry: DtoRegistryView): FactoryRow[] {
+  const rows = new Map<number, FactoryRow>();
+  const row = (classId: number) => {
+    const id = Number(classId);
+    const existing = rows.get(id) ?? { classId: id, constants: [] };
+    rows.set(id, existing);
+    return existing;
+  };
+  Object.entries(registry.factoryConstants).forEach(([name, id]) => row(id).constants.push(name));
+  Object.entries(registry.factoryClasses).forEach(([name, id]) => {
+    row(id).className ??= name;
+  });
+  for (const current of rows.values()) {
+    current.schema = registry.schemas.find(
+      (schema) => Number(schema.factoryId) === Number(registry.factoryId) && Number(schema.classId) === current.classId,
+    );
+  }
+  return [...rows.values()].sort((a, b) => a.classId - b.classId);
+}
+

@@ -210,8 +210,10 @@ binary through a fallback pipeline:
    `errorCode` is one of `CLASS_NOT_FOUND`, `INCOMPATIBLE_CLASS`,
    `DATA_SERIALIZABLE_FACTORY_MISSING`, `PORTABLE_FACTORY_MISSING`, `CUSTOM_SERIALIZER_MISSING`,
    `COMPACT_SCHEMA_UNAVAILABLE`, `DTO_SCHEMA_MISSING` (an `IdentifiedDataSerializable` of a Studio
-   factory without a schema; `metadata.missingClassId` names it, nested DTOs included) or
-   `DESERIALIZATION_ERROR` and is translated by the UI. The
+   factory without a schema; `metadata.missingClassId` names exactly the class that is missing,
+   `metadata.nested` tells whether it is a DTO inside a registered root), `DTO_FIELD_READ_ERROR`
+   (all schemas exist but one field does not match the bytes; `metadata.failedClassId`,
+   `fieldOrder`, `fieldName`, `fieldType`) or `DESERIALIZATION_ERROR` and is translated by the UI. The
    `metadata` is read from the binary header: the class name of Java `Serializable`,
    `Externalizable` and non-identified `DataSerializable` objects, the factory and class ids of
    `IdentifiedDataSerializable` and Portable objects, the schema id of Compact data. `entryCost` comes
@@ -295,7 +297,11 @@ classes themselves are not needed: a schema is enough.
 3. Switch to **DTO class**, paste `SomeDTO.java` and press **Analyze Java Code**. The parser walks
    `readData` (or `writeData` when `readData` delegates elsewhere), maps every call to a
    serialization type and opens the **visual schema editor** with the result:
-   - *Factory ID*, *Class ID* (taken from `getClassId()`, or pick a factory constant) and *Class Name*;
+   - *Factory ID*, *Class ID* and *Class Name*. The class id is taken from the constant returned by
+     `getClassId()`, else from the class the factory creates (`case SOMEDTO -> new SomeDTO()`); names
+     are matched without regard to case and underscores (`SomeDTO`, `SOMEDTO`, `SOME_DTO`). When
+     neither works the field stays **empty** and has to be chosen (a factory constant, or the id of the
+     value you came from) — the parser never falls back to a default id;
    - one row per field **in byte order** — reorder with *Move Up* / *Move Down*, add or remove rows;
    - the *Serialization Type* of each field (`NullableLong`, `NullableString`, `NullableDate`,
      `NullableObject`, `NullableBoolean`, `NullableInt`, `NullableDouble`, `NullableBigDecimal`,
@@ -310,10 +316,25 @@ classes themselves are not needed: a schema is enough.
 4. Press **Save Schema**. The schema is written to `config/dto-schemas.json` and used at once: open a
    map and its `SomeDTO` values appear as JSON (type *Registered DTO*), can be edited in the Entry
    Inspector and are written back **byte-identical** to what your application writes.
-5. Repeat step 3 for every DTO, nested ones included. A map page lists the classes on the page that
-   still have no schema with a **Configure DTO Schema (Factory ID: X, Class ID: Y)** button; the
-   same button appears in the Entry Inspector of such a value. It opens the Studio with the ids
-   pre-filled.
+5. Repeat step 3 for every DTO, nested ones included, **in any order**. A parent may be added before
+   its nested classes: its `nestedClassName` is kept, and the `nestedClassId` is filled in from the
+   factory mapping right away or, at the latest, when the nested class is saved (every save links all
+   schemas again). Every schema is stored under its own `factoryId:classId`; saving never removes
+   another schema, and the editor warns (*Replace Schema*) before a save would replace the schema
+   stored under the same ids.
+
+**When a value cannot be read** the map page and the Entry Inspector say precisely why:
+
+- *Root DTO `SomeDTO (classId: 1)` cannot be read because nested DTO `classId: 2 (Some2DTO)` is not
+  registered* — the button **Configure Missing DTO (classId: 2)** opens the Studio for the nested
+  class, not for the registered root;
+- *DTO `UnknownDTO (classId: 3)` is not registered* — **Configure Missing DTO (classId: 3)**;
+- *Deserialization error in `SomeDTO (classId: 1)` at field #3 `field3` (`NULLABLE_STRING`). Check
+  field order/types in schema* — all schemas exist, but the layout does not match the bytes;
+  **Edit Schema (classId: 1)** opens that schema.
+
+Saving, deleting or importing schemas refreshes the open map pages and re-runs the healthcheck at
+once, so fixed values and the *Unregistered DTO* check update without waiting for the next minute.
 
 **Creating values.** In *Put Entry* choose the value type **Registered DTO (IdentifiedDataSerializable)**,
 pick the class (e.g. `SomeDTO (classId: 1)`) and press **Generate JSON Template**: every field,
@@ -325,14 +346,17 @@ too), `BigDecimal`s and longs beyond ±2^53 are strings so no digit is lost, `by
 Nested values that are neither DTOs, strings nor booleans keep their Java type as
 `{"@javaType": "java.lang.Integer", "value": 5}`.
 
-**`config/dto-schemas.json` and the team.** The file holds the factory mapping and all schemas
-(including the pasted source of each DTO). Its location is `admin.dto-schemas.file`
+**`config/dto-schemas.json` and the team.** The file holds two independent parts: the factory
+mapping (`factoryId`, `factoryConstants`, `factoryClasses`) and the schemas (including the pasted
+source of each DTO). Deleting schemas — even all of them — keeps the factory mapping; only parsing a
+factory again replaces it. Its location is `admin.dto-schemas.file`
 (`DTO_SCHEMAS_FILE`, default `./config/dto-schemas.json`, i.e. the `config/` folder of the
 distribution). Share it like any other configuration:
 
 - **Export JSON** downloads the whole registry; each schema card also has its own *Export JSON*.
 - **Import JSON** uploads such a file — *Merge* adds / overwrites schemas with the same ids,
-  *Replace all* makes the registry identical to the file.
+  *Replace all* makes the schemas identical to the file (the factory mapping is replaced only when
+  the file contains one, so importing a single exported schema keeps the parsed factory).
 - Or simply commit `dto-schemas.json` next to your DTOs and copy it into `config/` of every
   installation; it is read on start.
 

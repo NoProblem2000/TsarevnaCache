@@ -15,6 +15,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import lombok.RequiredArgsConstructor;
+import io.github.noproblem2000.tsarevnacache.dto.DtoSchemaRegistryService.SaveOutcome;
+import io.github.noproblem2000.tsarevnacache.dto.DtoSchemasChangedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -41,6 +44,7 @@ public class SchemaController {
 
     private final DtoSchemaRegistryService registry;
     private final JavaDtoSourceParserService parser;
+    private final ApplicationEventPublisher events;
 
     /** All schemas plus the factory mapping. */
     @GetMapping
@@ -58,6 +62,7 @@ public class SchemaController {
         FactoryParseResult result = parser.parseFactorySource(request.source());
         if (save) {
             registry.updateFactory(result.factoryId(), result.constants(), result.classes());
+            events.publishEvent(new DtoSchemasChangedEvent("factory " + result.factoryId() + " parsed"));
         }
         return result;
     }
@@ -68,11 +73,18 @@ public class SchemaController {
         return parser.parseDtoClassSource(request.source());
     }
 
-    /** Creates or replaces a schema (same factory id + class id). */
+    /**
+     * Creates or replaces the schema stored under {@code factoryId:classId}; other schemas are never
+     * removed. Nested references of all schemas to this class are linked, and the healthcheck is
+     * refreshed.
+     */
     @PostMapping
     public SaveResult save(@Valid @RequestBody DtoClassSchema schema) {
-        DtoClassSchema saved = registry.save(schema);
-        return new SaveResult(saved, !registry.isActiveFactory(saved.factoryId()));
+        SaveOutcome outcome = registry.saveDetailed(schema);
+        DtoClassSchema saved = outcome.schema();
+        events.publishEvent(new DtoSchemasChangedEvent("schema " + saved.key() + " saved"));
+        return new SaveResult(saved, !registry.isActiveFactory(saved.factoryId()),
+                outcome.linked().stream().map(Object::toString).toList(), outcome.warnings());
     }
 
     @DeleteMapping("/{factoryId}/{classId}")
@@ -81,6 +93,7 @@ public class SchemaController {
             throw new ApiException(ErrorCode.DTO_SCHEMA_NOT_FOUND, "No DTO schema for factoryId=" + factoryId
                     + ", classId=" + classId, Map.of("factoryId", factoryId, "classId", classId));
         }
+        events.publishEvent(new DtoSchemasChangedEvent("schema " + factoryId + ":" + classId + " deleted"));
         return ResponseEntity.noContent().build();
     }
 
@@ -106,6 +119,7 @@ public class SchemaController {
             throw new ApiException(ErrorCode.VALIDATION_FAILED, "mode must be 'replace' or 'merge'", Map.of("mode", mode));
         }
         registry.importFile(content, mode.equals("replace"));
+        events.publishEvent(new DtoSchemasChangedEvent("registry imported"));
         return view();
     }
 
@@ -131,8 +145,12 @@ public class SchemaController {
      * @param schema          the stored (normalized) schema
      * @param restartRequired {@code true} when its factory id is not served by the running client yet;
      *                        the dynamic factory for it is registered on the next start
+     * @param linkedSchemas   keys ({@code factoryId:classId}) of other schemas whose nested fields now
+     *                        point to this class
+     * @param warnings        things to check, e.g. the same class registered under another class id
      */
-    public record SaveResult(DtoClassSchema schema, boolean restartRequired) {
+    public record SaveResult(DtoClassSchema schema, boolean restartRequired, List<String> linkedSchemas,
+                             List<String> warnings) {
     }
 
     /**

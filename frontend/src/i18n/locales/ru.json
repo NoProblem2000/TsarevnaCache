@@ -209,7 +209,11 @@
     "missingSchemas_one": "{{count}} ключ или значение на странице использует класс IdentifiedDataSerializable без схемы.",
     "missingSchemas_few": "{{count}} ключа или значения на странице используют классы IdentifiedDataSerializable без схемы.",
     "missingSchemas_many": "{{count}} ключей или значений на странице используют классы IdentifiedDataSerializable без схемы.",
-    "missingSchemas_other": "{{count}} ключа или значения на странице используют классы IdentifiedDataSerializable без схемы."
+    "missingSchemas_other": "{{count}} ключа или значения на странице используют классы IdentifiedDataSerializable без схемы.",
+    "fieldErrors_one": "{{count}} значение на странице не совпадает со своей схемой DTO.",
+    "fieldErrors_few": "{{count}} значения на странице не совпадают со своими схемами DTO.",
+    "fieldErrors_many": "{{count}} значений на странице не совпадают со своими схемами DTO.",
+    "fieldErrors_other": "{{count}} значения на странице не совпадают со своими схемами DTO."
   },
   "inspector": {
     "title": "Инспектор записи",
@@ -437,7 +441,8 @@
     "CUSTOM_SERIALIZER_MISSING": "Объект записан кастомным сериализатором, который не зарегистрирован.",
     "COMPACT_SCHEMA_UNAVAILABLE": "Не удалось получить Compact-схему из кластера.",
     "DESERIALIZATION_ERROR": "Объект не удалось десериализовать.",
-    "DTO_SCHEMA_MISSING": "Для этих factoryId/classId нет схемы DTO. Добавьте её в DTO Schema Studio."
+    "DTO_SCHEMA_MISSING": "Для этих factoryId/classId нет схемы DTO. Добавьте её в DTO Schema Studio.",
+    "DTO_FIELD_READ_ERROR": "Все схемы DTO зарегистрированы, но байты не совпадают со схемой в одном из полей. Проверьте порядок и типы полей."
   },
   "notFound": {
     "title": "Страница не найдена",
@@ -478,7 +483,9 @@
       "empty": "Фабрика ещё не разобрана. Вставьте DataSerializableFactory.java, чтобы сопоставить константы и class id.",
       "hasSchema": "Схема",
       "addSchema": "Добавить",
-      "noClass": "нет класса"
+      "noClass": "нет класса",
+      "registered": "Зарегистрирован",
+      "registeredCount": "зарегистрировано {{registered}} из {{total}}"
     },
     "storage": {
       "title": "Хранение и фабрики",
@@ -543,7 +550,15 @@
       "showPreview": "Предпросмотр JSON",
       "hidePreview": "Скрыть предпросмотр",
       "previewTitle": "JSON-шаблон этой схемы",
-      "targetMismatch": "У вставленного класса class id {{parsed}}, а у ненайденного значения — {{expected}}: проверьте, тот ли это класс."
+      "targetMismatch": "У вставленного класса class id {{parsed}}, а у ненайденного значения — {{expected}}: проверьте, тот ли это класс.",
+      "linked_one": "{{count}} схема со вложенным полем {{name}} теперь связана с ним",
+      "linked_few": "{{count}} схемы со вложенными полями {{name}} теперь связаны с ним",
+      "linked_many": "{{count}} схем со вложенными полями {{name}} теперь связаны с ним",
+      "linked_other": "{{count}} схемы со вложенными полями {{name}} теперь связаны с ним",
+      "replace": "Заменить схему",
+      "occupied": "classId {{classId}} (factory {{factoryId}}) уже занят схемой {{name}}: сохранение заменит её.",
+      "classIdUnresolved": "Class id не удалось определить по исходнику. Значение, из которого вы пришли, ожидает classId {{classId}}.",
+      "useSuggestedClassId": "Использовать classId {{classId}}"
     },
     "paste": {
       "title": "Умная вставка Java",
@@ -586,7 +601,8 @@
       "done_few": "Импорт завершён: зарегистрированы {{count}} схемы",
       "done_many": "Импорт завершён: зарегистрировано {{count}} схем",
       "done_other": "Импорт завершён: зарегистрировано {{count}} схемы"
-    }
+    },
+    "alreadyRegistered": "У {{name}} (classId: {{classId}}) уже есть схема — она открыта для редактирования"
   },
   "health": {
     "title": "Проверка здоровья и советы",
@@ -743,5 +759,15 @@
       "DTO_UNREGISTERED_SCHEMA": "Откройте DTO Schema Studio и вставьте Java-код этого класса (и фабрики, чтобы стало известно его имя). Как только схема сохранена, значения сразу читаются и редактируются.",
       "DTO_UNREGISTERED_SCHEMA_RESTART": "Factory id этого класса пока не обслуживается DTO Schema Studio. Добавьте схему в Studio и перезапустите сервис или положите jar с классом и его фабрикой в lib/."
     }
+  },
+  "dtoProblem": {
+    "nestedMissing": "Корневой DTO <code>{{root}}</code> не читается, потому что вложенный DTO <strong>{{missing}}</strong> не зарегистрирован.",
+    "rootMissing": "DTO <strong>{{missing}}</strong> не зарегистрирован: для этого class id нет схемы.",
+    "fieldError": "Ошибка десериализации в <code>{{schema}}</code> на поле #{{order}} <strong>{{field}}</strong> (<code>{{type}}</code>). Проверьте порядок и типы полей в схеме.",
+    "configureMissing": "Настроить недостающий DTO (classId: {{classId}})",
+    "editSchema": "Изменить схему (classId: {{classId}})",
+    "path": "Путь:",
+    "nestedIn": "{{missing}} вложен в {{roots}}, а они зарегистрированы",
+    "nestedBadge": "вложенный"
   }
 }

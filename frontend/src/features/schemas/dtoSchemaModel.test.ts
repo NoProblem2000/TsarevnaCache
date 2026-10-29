@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import type { DtoClassSchema, DtoRegistryView } from '../../api/types';
-import { emptyField, fromForm, generateTemplate, moveField, nestedSchema, toForm, validateForm } from './dtoSchemaModel';
+import {
+  emptyField,
+  factoryRows,
+  fromForm,
+  generateTemplate,
+  moveField,
+  nestedSchema,
+  normalizeName,
+  resolveClassId,
+  toForm,
+  validateForm,
+} from './dtoSchemaModel';
 
 const some2: DtoClassSchema = {
   factoryId: 1,
@@ -112,5 +123,33 @@ describe('schema form', () => {
     expect(nestedSchema(registry, 1, { nestedClassId: 2 })?.className).toBe('Some2DTO');
     expect(nestedSchema(registry, 1, { nestedClassName: 'Some2DTO' })?.classId).toBe(2);
     expect(nestedSchema(registry, 1, { nestedClassName: 'Missing' })).toBeUndefined();
+  });
+});
+
+describe('factory status and class ids', () => {
+  it('matches schemas to factory ids by number, never by the spelling of names', () => {
+    const view: DtoRegistryView = {
+      ...registry,
+      factoryConstants: { SOMEDTO: 1, SOME2DTO: 2, LATER: 7 },
+      factoryClasses: { SomeDTO: 1 },
+      // ids that arrive as strings (e.g. from an imported file) still match
+      schemas: [{ ...some2, classId: '2' as unknown as number, className: 'Some2Dto' }],
+    };
+    const rows = factoryRows(view);
+    expect(rows.map((row) => row.classId)).toEqual([1, 2, 7]);
+    expect(rows[0]).toMatchObject({ constants: ['SOMEDTO'], className: 'SomeDTO', schema: undefined });
+    expect(rows[1].constants).toEqual(['SOME2DTO']);
+    expect(rows[1].schema?.className).toBe('Some2Dto');
+    expect(rows[2].schema).toBeUndefined();
+  });
+
+  it('resolves class ids without regard to case and underscores', () => {
+    const view: DtoRegistryView = { ...registry, factoryConstants: { SOME_OTHER_DTO: 3 }, factoryClasses: { SomeDTO: 1 }, schemas: [] };
+    expect(normalizeName('SOME_DTO')).toBe('somedto');
+    expect(resolveClassId(view, 'SomeDTO', 1)).toBe(1);
+    expect(resolveClassId(view, 'someDto', 1)).toBe(1);
+    expect(resolveClassId(view, 'SomeOtherDto', 1)).toBe(3);
+    expect(resolveClassId(view, 'SomeOtherDto', 9)).toBeUndefined();
+    expect(resolveClassId(view, 'Unknown', 1)).toBeUndefined();
   });
 });

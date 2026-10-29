@@ -113,6 +113,61 @@ class JavaDtoSourceParserServiceTest {
     }
 
     @Test
+    void classIdIsFoundWithoutRegardToCaseAndNeverDefaulted() {
+        FactoryParseResult factory = parser.parseFactorySource("""
+                public class DataSerializableFactory implements com.hazelcast.nio.serialization.DataSerializableFactory {
+                    public static final int FACTORY_ID = 1;
+                    public static final int SOMEDTO = 1;
+                    public static final int SOMEDTO2 = 2;
+                    public static final int OTHER_DTO = 5;
+                    public IdentifiedDataSerializable create(int typeId) {
+                        return switch (typeId) {
+                            case SOMEDTO -> new SomeDTO();
+                            case SOMEDTO2 -> new Some2DTO();
+                            case OTHER_DTO -> new OtherDto();
+                            default -> null;
+                        };
+                    }
+                }""");
+        registry.updateFactory(factory.factoryId(), factory.constants(), factory.classes());
+
+        // the constant spelled like the class name
+        DtoParseResult byConstant = parser.parseDtoClassSource("""
+                @Description("This class is stored in Hazelcast")
+                public class SomeDTO implements IdentifiedDataSerializable {
+                    private Some2DTO field3;
+                    public int getClassId() { return DataSerializableFactory.SomeDTO; }
+                    public void readData(ObjectDataInput in) throws IOException {
+                        field3 = SerializationUtils.readNullableObject(in);
+                    }
+                }""");
+        assertThat(byConstant.schema().className()).isEqualTo("SomeDTO");
+        assertThat(byConstant.schema().classId()).isEqualTo(1);
+        assertThat(byConstant.schema().fields().get(0).nestedClassName()).isEqualTo("Some2DTO");
+        assertThat(byConstant.schema().fields().get(0).nestedClassId()).isEqualTo(2);
+
+        // unknown constant: the class name from the factory switch (Some2DTO -> SOMEDTO2)
+        DtoParseResult byClassName = parser.parseDtoClassSource("""
+                public class Some2DTO implements IdentifiedDataSerializable {
+                    private String label;
+                    public int getClassId() { return Ids.SECOND; }
+                    public void readData(ObjectDataInput in) throws IOException { label = in.readString(); }
+                }""");
+        assertThat(byClassName.schema().classId()).isEqualTo(2);
+
+        // neither: no default id, the UI has to ask
+        DtoParseResult unknown = parser.parseDtoClassSource("""
+                public class Fifth implements IdentifiedDataSerializable {
+                    private String label;
+                    public int getClassId() { return Ids.FIFTH; }
+                    public void readData(ObjectDataInput in) throws IOException { label = in.readString(); }
+                }""");
+        assertThat(unknown.schema().classId()).isNull();
+        assertThat(unknown.complete()).isFalse();
+        assertThat(unknown.warnings()).anyMatch(w -> w.contains("classId could not be resolved"));
+    }
+
+    @Test
     void unknownSourceIsRejected() {
         assertThatThrownBy(() -> parser.parseDtoClassSource("hello"))
                 .isInstanceOfSatisfying(ApiException.class,

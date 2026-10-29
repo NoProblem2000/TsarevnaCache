@@ -197,7 +197,9 @@
     "saved": "Entry saved",
     "refresh": "Reload page",
     "missingSchemas_one": "{{count}} key or value on this page uses an IdentifiedDataSerializable class without a schema.",
-    "missingSchemas_other": "{{count}} keys or values on this page use IdentifiedDataSerializable classes without a schema."
+    "missingSchemas_other": "{{count}} keys or values on this page use IdentifiedDataSerializable classes without a schema.",
+    "fieldErrors_one": "{{count}} value on this page does not match its DTO schema.",
+    "fieldErrors_other": "{{count}} values on this page do not match their DTO schemas."
   },
   "inspector": {
     "title": "Entry Inspector",
@@ -425,7 +427,8 @@
     "CUSTOM_SERIALIZER_MISSING": "The object was written by a custom serializer that is not registered.",
     "COMPACT_SCHEMA_UNAVAILABLE": "The Compact schema could not be fetched from the cluster.",
     "DESERIALIZATION_ERROR": "The object could not be deserialized.",
-    "DTO_SCHEMA_MISSING": "No DTO schema is registered for this factoryId/classId. Add it in the DTO Schema Studio."
+    "DTO_SCHEMA_MISSING": "No DTO schema is registered for this factoryId/classId. Add it in the DTO Schema Studio.",
+    "DTO_FIELD_READ_ERROR": "All DTO schemas are registered, but the bytes do not match the schema at one field. Check the field order and types."
   },
   "notFound": {
     "title": "Page not found",
@@ -464,7 +467,9 @@
       "empty": "No factory parsed yet. Paste your DataSerializableFactory.java to map constants to class ids.",
       "hasSchema": "Schema",
       "addSchema": "Add",
-      "noClass": "no class"
+      "noClass": "no class",
+      "registered": "Registered",
+      "registeredCount": "{{registered}} of {{total}} registered"
     },
     "storage": {
       "title": "Storage & factories",
@@ -527,7 +532,13 @@
       "showPreview": "Preview JSON",
       "hidePreview": "Hide preview",
       "previewTitle": "JSON template of this schema",
-      "targetMismatch": "The pasted class has class id {{parsed}}, the missing value has {{expected}}: check that this is the right class."
+      "targetMismatch": "The pasted class has class id {{parsed}}, the missing value has {{expected}}: check that this is the right class.",
+      "linked_one": "{{count}} schema with a nested {{name}} field is linked to it now",
+      "linked_other": "{{count}} schemas with nested {{name}} fields are linked to it now",
+      "replace": "Replace Schema",
+      "occupied": "classId {{classId}} (factory {{factoryId}}) is already used by {{name}}: saving replaces that schema.",
+      "classIdUnresolved": "The class id could not be determined from the source. The value you came from expects classId {{classId}}.",
+      "useSuggestedClassId": "Use classId {{classId}}"
     },
     "paste": {
       "title": "Smart Java Paste",
@@ -562,7 +573,8 @@
       "importing": "Importing…",
       "done_one": "Imported: {{count}} schema registered",
       "done_other": "Imported: {{count}} schemas registered"
-    }
+    },
+    "alreadyRegistered": "{{name}} (classId: {{classId}}) already has a schema: opened for editing"
   },
   "health": {
     "title": "Healthcheck & Advisor",
@@ -713,5 +725,15 @@
       "DTO_UNREGISTERED_SCHEMA": "Open the DTO Schema Studio and paste the Java source of this class (and of the factory, so its name is known). Once the schema is saved the values are readable and editable immediately.",
       "DTO_UNREGISTERED_SCHEMA_RESTART": "The factory id of this class is not served by the DTO Schema Studio yet. Add the schema in the Studio and restart the service, or put the jar with the class and its factory into lib/."
     }
+  },
+  "dtoProblem": {
+    "nestedMissing": "Root DTO <code>{{root}}</code> cannot be read because nested DTO <strong>{{missing}}</strong> is not registered.",
+    "rootMissing": "DTO <strong>{{missing}}</strong> is not registered: no schema for this class id.",
+    "fieldError": "Deserialization error in <code>{{schema}}</code> at field #{{order}} <strong>{{field}}</strong> (<code>{{type}}</code>). Check field order/types in schema.",
+    "configureMissing": "Configure Missing DTO (classId: {{classId}})",
+    "editSchema": "Edit Schema (classId: {{classId}})",
+    "path": "Path:",
+    "nestedIn": "{{missing}} is nested in {{roots}}, which are registered",
+    "nestedBadge": "nested"
   }
 }

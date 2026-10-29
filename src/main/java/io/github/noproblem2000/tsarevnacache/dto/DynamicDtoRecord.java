@@ -72,6 +72,34 @@ public final class DynamicDtoRecord implements IdentifiedDataSerializable {
         return schema;
     }
 
+    /**
+     * Field values as plain JSON-like data: nested DTOs (also inside lists) become
+     * {@code Map<String, Object>} recursively. {@link #data()} keeps the records, which are needed
+     * to write the value back byte-identically.
+     */
+    public Map<String, Object> toMap() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        data.forEach((name, value) -> result.put(name, plain(value)));
+        return result;
+    }
+
+    private static Object plain(Object value) {
+        if (value instanceof DynamicDtoRecord record) {
+            return record.toMap();
+        }
+        if (value instanceof List<?> list) {
+            return list.stream().map(DynamicDtoRecord::plain).toList();
+        }
+        return value;
+    }
+
+    /**
+     * Reads the fields in schema order. A nested {@code NULLABLE_OBJECT} / {@code NULLABLE_LIST}
+     * element is read by Hazelcast itself ({@code in.readObject()}): it reads the nested factory id
+     * and class id from the stream and asks the {@link DynamicDataSerializableFactory} for that
+     * class, so the parent's {@code nestedClassId} is not used here. Any failure is rethrown as a
+     * {@link DtoFieldReadException} naming this class and the field.
+     */
     @Override
     public void readData(ObjectDataInput in) throws IOException {
         DtoClassSchema layout = schema();
@@ -80,7 +108,7 @@ public final class DynamicDtoRecord implements IdentifiedDataSerializable {
             try {
                 data.put(field.fieldName(), read(field.fieldType(), in));
             } catch (IOException | RuntimeException e) {
-                throw new HazelcastSerializationException(position(layout, field, "reading") + ": " + rootMessage(e), e);
+                throw new DtoFieldReadException(layout, field, e);
             }
         }
     }

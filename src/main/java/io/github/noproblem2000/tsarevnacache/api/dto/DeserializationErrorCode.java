@@ -20,6 +20,17 @@ public enum DeserializationErrorCode {
     COMPACT_SCHEMA_UNAVAILABLE,
     /** Any other deserialization failure. */
     DESERIALIZATION_ERROR,
-    /** The factory id is served by the dynamic DTO registry, but no schema is registered for the class id. */
-    DTO_SCHEMA_MISSING
+    /**
+     * The factory id is served by the dynamic DTO registry, but no schema is registered for the class
+     * id of the stored object or of a DTO nested in it (metadata {@code missingFactoryId},
+     * {@code missingClassId}, {@code nested}, {@code rootClassId}, {@code fieldPath}).
+     */
+    DTO_SCHEMA_MISSING,
+    /**
+     * All DTO schemas involved are registered, but reading failed at one field (wrong type or order,
+     * fewer bytes than the schema expects). Metadata names the class ({@code failedFactoryId},
+     * {@code failedClassId}, {@code failedClassName}) and the field ({@code fieldOrder},
+     * {@code fieldName}, {@code fieldType}, {@code fieldError}).
+     */
+    DTO_FIELD_READ_ERROR
 }

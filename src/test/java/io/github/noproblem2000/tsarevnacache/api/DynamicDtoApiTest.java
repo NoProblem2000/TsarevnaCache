@@ -171,8 +171,68 @@ class DynamicDtoApiTest extends AbstractApiTest {
         assertThat(unresolved.path("errorCode").asText()).isEqualTo("DTO_SCHEMA_MISSING");
         assertThat(unresolved.path("metadata").path("missingClassId").asInt()).isEqualTo(2);
         assertThat(unresolved.path("missingClass").asText()).isEqualTo("Some2DTO (factoryId=1, classId=2)");
+        // the root SomeDTO is registered: the nested class is named, not the root header
+        JsonNode metadata = unresolved.path("metadata");
+        assertThat(metadata.path("nested").asBoolean()).isTrue();
+        assertThat(metadata.path("rootClassId").asInt()).isEqualTo(1);
+        assertThat(metadata.path("rootClassName").asText()).isEqualTo("SomeDTO");
+        assertThat(metadata.path("missingClassName").asText()).isEqualTo("Some2DTO");
+        assertThat(metadata.path("fieldPath").asText()).isEqualTo("SomeDTO.details");
+        assertThat(unresolved.path("reason").asText()).startsWith("Failed in SomeDTO (classId=1) at field #3 'details'");
 
         assertThat(httpDelete("/api/schemas/1/2").code()).isEqualTo("DTO_SCHEMA_NOT_FOUND");
+    }
+
+    @Test
+    void fieldLayoutErrorNamesTheClassAndFieldInsteadOfAMissingSchema() throws Exception {
+        cluster().member().getMap("dto-layout").put("l", someDto());
+        ObjectNode schema = (ObjectNode) httpGet("/api/schemas").body().path("schemas").get(0).deepCopy();
+        assertThat(schema.path("className").asText()).isEqualTo("SomeDTO");
+        ((ArrayNode) schema.path("fields")).addObject().put("order", 15).put("fieldName", "extra").put("fieldType", "RAW_LONG");
+        assertThat(httpPostJson("/api/schemas", schema).status()).isEqualTo(200);
+
+        JsonNode unresolved = httpGet("/api/maps/dto-layout/entry?key=l&keyType=STRING").body()
+                .path("value").path("unresolved");
+        assertThat(unresolved.path("errorCode").asText()).isEqualTo("DTO_FIELD_READ_ERROR");
+        JsonNode metadata = unresolved.path("metadata");
+        assertThat(metadata.path("failedClassId").asInt()).isEqualTo(1);
+        assertThat(metadata.path("failedClassName").asText()).isEqualTo("SomeDTO");
+        assertThat(metadata.path("fieldOrder").asInt()).isEqualTo(15);
+        assertThat(metadata.path("fieldName").asText()).isEqualTo("extra");
+        assertThat(metadata.path("fieldType").asText()).isEqualTo("RAW_LONG");
+        assertThat(metadata.path("fieldError").asText()).contains("EOFException");
+        assertThat(unresolved.path("reason").asText())
+                .startsWith("Failed in SomeDTO (classId=1) at field #15 'extra' (type=RAW_LONG): EOFException");
+        assertThat(unresolved.has("missingClass")).isFalse();
+    }
+
+    @Test
+    void nestedSchemaAddedAfterItsParentIsLinkedAndReadable() throws Exception {
+        cluster().member().getMap("dto-order").put("o", someDto());
+        assertThat(httpDelete("/api/schemas/1/1").status()).isEqualTo(204);
+        assertThat(httpDelete("/api/schemas/1/2").status()).isEqualTo(204);
+        JsonNode empty = httpGet("/api/schemas").body();
+        assertThat(empty.path("schemas").size()).isZero();
+        // deleting every schema keeps the parsed factory constants
+        assertThat(empty.path("factoryConstants").path("SOME2DTO").asInt()).isEqualTo(2);
+        assertThat(empty.path("factoryClasses").path("Some2DTO").asInt()).isEqualTo(2);
+
+        // the parent first: its nested class is known from the factory, the value still needs Some2DTO
+        JsonNode parent = httpPostJson("/api/schemas/parse-dto", source(ProductionDtoSources.SOME_DTO)).body().path("schema");
+        assertThat(httpPostJson("/api/schemas", parent).status()).isEqualTo(200);
+        JsonNode missing = httpGet("/api/maps/dto-order/entry?key=o&keyType=STRING").body().path("value").path("unresolved");
+        assertThat(missing.path("metadata").path("missingClassId").asInt()).isEqualTo(2);
+
+        JsonNode child = httpPostJson("/api/schemas/parse-dto", source(ProductionDtoSources.SOME2_DTO)).body().path("schema");
+        Response saved = httpPostJson("/api/schemas", child);
+        assertThat(saved.status()).isEqualTo(200);
+        assertThat(saved.body().path("schema").path("classId").asInt()).isEqualTo(2);
+
+        JsonNode value = httpGet("/api/maps/dto-order/entry?key=o&keyType=STRING").body().path("value");
+        assertThat(value.path("deserialized").asBoolean()).isTrue();
+        assertThat(value.path("value").path("details").path("label").asText()).isEqualTo("inner");
+        assertThat(httpGet("/api/schemas").body().path("schemas").get(0).path("fields").get(3).path("nestedClassId").asInt())
+                .isEqualTo(2);
     }
 
     @Test
@@ -224,7 +284,9 @@ class DynamicDtoApiTest extends AbstractApiTest {
 
         httpPostJson("/api/schemas/import?mode=replace", DtoSchemaRegistryFile.empty());
         assertThat(httpGet("/api/schemas").body().path("schemas").size()).isZero();
-        assertThat(Files.readString(DTO_SCHEMAS_FILE)).doesNotContain("SomeDTO");
+        assertThat(Files.readString(DTO_SCHEMAS_FILE)).doesNotContain("\"className\" : \"SomeDTO\"");
+        // a file without a factory mapping keeps the parsed factory
+        assertThat(httpGet("/api/schemas").body().path("factoryClasses").path("SomeDTO").asInt()).isEqualTo(1);
 
         JsonNode restored = httpPostJson("/api/schemas/import", exported).body();
         assertThat(restored.path("schemas").size()).isEqualTo(2);

@@ -37,7 +37,7 @@ public record DtoClassSchema(
         return new SchemaKey(factoryId, classId);
     }
 
-    /** Identity of a schema: factory id + class id. */
+    /** Identity of a schema, the storage key {@code factoryId:classId}. */
     public record SchemaKey(int factoryId, int classId) implements Comparable<SchemaKey> {
 
         @Override
@@ -48,7 +48,7 @@ public record DtoClassSchema(
 
         @Override
         public String toString() {
-            return factoryId + "/" + classId;
+            return factoryId + ":" + classId;
         }
     }
 }

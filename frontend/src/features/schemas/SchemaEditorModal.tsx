@@ -15,6 +15,7 @@ import {
   generateTemplate,
   knownClassNames,
   moveField,
+  normalizeName,
   validateForm,
   type EditableField,
   type FormProblem,
@@ -34,6 +35,8 @@ interface SchemaEditorModalProps {
   /** Parser warnings shown above the editor. */
   warnings?: string[];
   registry: DtoRegistryView | undefined;
+  /** Class id expected by the opened target when the parser could not resolve one: offered, not filled in. */
+  suggestedClassId?: number;
   onClose: () => void;
 }
 
@@ -41,7 +44,15 @@ interface SchemaEditorModalProps {
  * Visual schema constructor: factory id, class id (or a factory constant), class name and the
  * ordered field table. The row order is the byte order of `readData`.
  */
-export function SchemaEditorModal({ open, initial, original, warnings = [], registry, onClose }: SchemaEditorModalProps) {
+export function SchemaEditorModal({
+  open,
+  initial,
+  original,
+  warnings = [],
+  registry,
+  suggestedClassId,
+  onClose,
+}: SchemaEditorModalProps) {
   const { t } = useTranslation();
   const toast = useToast();
   const invalidate = useInvalidateSchemaData();
@@ -64,6 +75,16 @@ export function SchemaEditorModal({ open, initial, original, warnings = [], regi
   const classNames = knownClassNames(registry);
   const constants = Object.entries(registry?.factoryConstants ?? {}).sort((a, b) => a[1] - b[1]);
   const projectFactory = registry === undefined || form.factoryId.trim() === String(registry.factoryId);
+  // another schema stored under the same factoryId:classId would be replaced by saving
+  const occupied =
+    !has('factoryId') && !has('classId')
+      ? registry?.schemas.find(
+          (schema) =>
+            Number(schema.factoryId) === Number(form.factoryId.trim()) &&
+            Number(schema.classId) === Number(form.classId.trim()) &&
+            !(original && Number(original.factoryId) === Number(schema.factoryId) && Number(original.classId) === Number(schema.classId)),
+        )
+      : undefined;
   const preview = useMemo(
     () => (showPreview && problems.length === 0 ? toEditorText(generateTemplate(fromForm(form, registry), registry)) : ''),
     [showPreview, problems.length, form, registry],
@@ -78,7 +99,10 @@ export function SchemaEditorModal({ open, initial, original, warnings = [], regi
 
   /** Picking a class name known to the factory also fills in its class id. */
   const changeClassName = (className: string) => {
-    const known = projectFactory ? registry?.factoryClasses[className] : undefined;
+    const known = projectFactory
+      ? (registry?.factoryClasses[className] ??
+        Object.entries(registry?.factoryClasses ?? {}).find(([name]) => normalizeName(name) === normalizeName(className))?.[1])
+      : undefined;
     update(known !== undefined && form.classId.trim() === '' ? { className, classId: String(known) } : { className });
   };
   const pickConstant = (name: string) => {
@@ -86,7 +110,7 @@ export function SchemaEditorModal({ open, initial, original, warnings = [], regi
     if (id === undefined) {
       return;
     }
-    const className = Object.entries(registry?.factoryClasses ?? {}).find(([, classId]) => classId === id)?.[0];
+    const className = Object.entries(registry?.factoryClasses ?? {}).find(([, classId]) => Number(classId) === Number(id))?.[0];
     update({ classId: String(id), className: form.className.trim() === '' && className ? className : form.className });
   };
 
@@ -99,7 +123,10 @@ export function SchemaEditorModal({ open, initial, original, warnings = [], regi
     try {
       const schema = fromForm(form, registry);
       const result = await endpoints.schemas.save(schema);
-      if (original && (original.factoryId !== result.schema.factoryId || original.classId !== result.schema.classId)) {
+      if (
+        original &&
+        (Number(original.factoryId) !== Number(result.schema.factoryId) || Number(original.classId) !== Number(result.schema.classId))
+      ) {
         // the ids changed: the old entry would otherwise stay as a second schema
         await endpoints.schemas.remove(original.factoryId, original.classId).catch(() => undefined);
       }
@@ -109,6 +136,12 @@ export function SchemaEditorModal({ open, initial, original, warnings = [], regi
           ? t('schemas.editor.savedRestart', { name: result.schema.className, factoryId: result.schema.factoryId })
           : t('schemas.editor.saved', { name: result.schema.className }),
       );
+      if ((result.linkedSchemas?.length ?? 0) > 0) {
+        toast.success(t('schemas.editor.linked', { name: result.schema.className, count: result.linkedSchemas?.length ?? 0 }));
+      }
+      for (const warning of result.warnings ?? []) {
+        toast.error(warning);
+      }
       onClose();
     } catch (failure) {
       setError(failure);
@@ -140,7 +173,7 @@ export function SchemaEditorModal({ open, initial, original, warnings = [], regi
             {t('common.cancel')}
           </button>
           <button type="button" className="gk-btn-primary" onClick={() => void save()} disabled={saving || problems.length > 0}>
-            {saving ? t('schemas.editor.saving') : t('schemas.editor.save')}
+            {saving ? t('schemas.editor.saving') : occupied ? t('schemas.editor.replace') : t('schemas.editor.save')}
           </button>
         </>
       }
@@ -215,6 +248,21 @@ export function SchemaEditorModal({ open, initial, original, warnings = [], regi
             </datalist>
           </label>
         </div>
+        {suggestedClassId !== undefined && form.classId.trim() === '' && (
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-gk-cyan/30 bg-gk-cyan/5 px-3 py-2 text-xs">
+            <Info className="h-3.5 w-3.5 shrink-0 text-gk-cyan" aria-hidden />
+            <span className="min-w-0 flex-1 text-gk-text">{t('schemas.editor.classIdUnresolved', { classId: suggestedClassId })}</span>
+            <button type="button" className="gk-btn-secondary px-2 py-1 text-xs" onClick={() => update({ classId: String(suggestedClassId) })}>
+              {t('schemas.editor.useSuggestedClassId', { classId: suggestedClassId })}
+            </button>
+          </div>
+        )}
+        {occupied && (
+          <p className="flex items-center gap-1.5 text-xs text-gk-warning">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            {t('schemas.editor.occupied', { name: occupied.className, factoryId: occupied.factoryId, classId: occupied.classId })}
+          </p>
+        )}
         {(has('factoryId') || has('classId') || has('className')) && (
           <p className="text-xs text-gk-danger">{t('schemas.editor.idsInvalid')}</p>
         )}

@@ -48,6 +48,33 @@ final class JavaSourceScanner {
         return out.toString();
     }
 
+    /**
+     * Replaces the content of string, char and text block literals with spaces (quotes and newlines
+     * are kept), so keywords inside literals such as {@code "class Foo"} are not matched.
+     */
+    static String blankLiterals(String source) {
+        StringBuilder out = new StringBuilder(source.length());
+        int i = 0;
+        while (i < source.length()) {
+            char c = source.charAt(i);
+            if (c == '"' || c == '\'') {
+                int end = literalEnd(source, i);
+                out.append(c);
+                for (int j = i + 1; j < end - 1; j++) {
+                    out.append(source.charAt(j) == '\n' ? '\n' : ' ');
+                }
+                if (end - 1 > i) {
+                    out.append(source.charAt(end - 1));
+                }
+                i = end;
+            } else {
+                out.append(c);
+                i++;
+            }
+        }
+        return out.toString();
+    }
+
     /** Index just after the string, char or text block literal starting at {@code start}. */
     static int literalEnd(String source, int start) {
         char quote = source.charAt(start);

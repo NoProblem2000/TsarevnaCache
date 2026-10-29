@@ -12,9 +12,10 @@ import lombok.extern.slf4j.Slf4j;
  * <ol>
  *   <li>a {@link DynamicDtoRecord} when a schema is registered in the {@link DtoSchemaRegistryService};</li>
  *   <li>the object of the real factory from {@code lib/*.jar} (configured in
- *       {@code admin.hazelcast.serialization.data-serializable-factories}), when present;</li>
- *   <li>{@code null}: Hazelcast then fails the read and the inspector reports the missing
- *       factory id / class id ({@code DTO_SCHEMA_MISSING}).</li>
+ *       {@code admin.hazelcast.serialization.data-serializable-factories}), when it knows the id;</li>
+ *   <li>otherwise it throws a {@link DtoSchemaMissingException} with exactly this factory id /
+ *       class id. Hazelcast calls the factory for every nested {@code writeObject} too, so for a
+ *       registered root DTO with an unregistered nested DTO the exception names the nested one.</li>
  * </ol>
  */
 @Slf4j
@@ -39,10 +40,13 @@ public final class DynamicDataSerializableFactory implements DataSerializableFac
             return new DynamicDtoRecord(factoryId, typeId, registry);
         }
         if (delegate != null) {
-            return delegate.create(typeId);
+            IdentifiedDataSerializable fromLibrary = delegate.create(typeId);
+            if (fromLibrary != null) {
+                return fromLibrary;
+            }
         }
-        log.debug("No DTO schema and no delegate factory for factoryId={}, classId={}", factoryId, typeId);
-        return null;
+        log.debug("No DTO schema and no delegate class for factoryId={}, classId={}", factoryId, typeId);
+        throw new DtoSchemaMissingException(factoryId, typeId, registry.classNameFor(factoryId, typeId).orElse(null));
     }
 
     public int factoryId() {

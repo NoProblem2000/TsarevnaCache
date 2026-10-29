@@ -23,23 +23,32 @@ import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Panel } from '../components/ui/Panel';
 import { CenteredSpinner } from '../components/ui/Spinner';
 import { useToast } from '../components/ui/Toast';
-import { downloadJson, toForm, type SchemaForm } from '../features/schemas/dtoSchemaModel';
+import { downloadJson, factoryRows, toForm, type SchemaForm } from '../features/schemas/dtoSchemaModel';
 import { ImportSchemasModal } from '../features/schemas/ImportSchemasModal';
 import { JavaPasteModal, type PasteMode } from '../features/schemas/JavaPasteModal';
 import { SchemaCard } from '../features/schemas/SchemaCard';
 import { SchemaEditorModal } from '../features/schemas/SchemaEditorModal';
-import { useInvalidateSchemaData, type DtoTarget } from '../features/schemas/schemaLinks';
+import { schemaKey, useInvalidateSchemaData, type DtoTarget } from '../features/schemas/schemaLinks';
 
 interface EditorState {
   initial: SchemaForm;
   original?: { factoryId: number; classId: number };
   warnings: string[];
+  /** Class id the opened target expects (offered as a one-click choice, never filled in silently). */
+  suggestedClassId?: number;
 }
 
 interface PasteState {
   mode: PasteMode;
   target?: DtoTarget;
+  /** New on every open, so the dialog always starts with a clean state. */
+  session: number;
 }
+
+let pasteSessions = 0;
+const pasteState = (mode: PasteMode, target?: DtoTarget): PasteState => ({ mode, target, session: ++pasteSessions });
+const sameSchema = (schema: DtoClassSchema, factoryId: number | undefined, classId: number | undefined) =>
+  Number(schema.factoryId) === Number(factoryId) && Number(schema.classId) === Number(classId);
 
 const intParam = (value: string | null) => (value !== null && /^-?\d+$/.test(value) ? Number(value) : undefined);
 
@@ -85,22 +94,26 @@ export function SchemasPage() {
       const factoryId = intParam(searchParams.get('factoryId'));
       const classId = intParam(searchParams.get('classId'));
       if (factoryId !== undefined && classId !== undefined) {
-        const existing = data.schemas.find((schema) => schema.factoryId === factoryId && schema.classId === classId);
+        const existing = data.schemas.find((schema) => sameSchema(schema, factoryId, classId));
         if (existing) {
+          // the class got a schema in the meantime: show it instead of starting a second one
+          toast.success(t('schemas.alreadyRegistered', { name: existing.className, classId: existing.classId }));
+          setHighlight(schemaKey(existing.factoryId, existing.classId));
           openEditor(existing);
         } else {
-          const knownName = factoryId === data.factoryId
-            ? Object.entries(data.factoryClasses).find(([, id]) => id === classId)?.[0]
-            : undefined;
-          setPaste({ mode: 'dto', target: { factoryId, classId, className: searchParams.get('className') ?? knownName } });
+          const knownName =
+            Number(factoryId) === Number(data.factoryId)
+              ? Object.entries(data.factoryClasses).find(([, id]) => Number(id) === Number(classId))?.[0]
+              : undefined;
+          setPaste(pasteState('dto', { factoryId, classId, className: searchParams.get('className') ?? knownName }));
         }
       }
       setSearchParams({}, { replace: true });
     } else if (searchParams.get('edit')) {
       const [factoryId, classId] = (searchParams.get('edit') ?? '').split('/').map(intParam);
-      const existing = data.schemas.find((schema) => schema.factoryId === factoryId && schema.classId === classId);
+      const existing = data.schemas.find((schema) => sameSchema(schema, factoryId, classId));
       if (existing) {
-        setHighlight(`${existing.factoryId}/${existing.classId}`);
+        setHighlight(schemaKey(existing.factoryId, existing.classId));
         openEditor(existing);
       }
       setSearchParams({}, { replace: true });
@@ -121,21 +134,24 @@ export function SchemasPage() {
   }, [data, filter]);
 
   const analyzed = (result: DtoParseResult, target?: DtoTarget) => {
+    const parsedClassId = result.schema.classId;
+    const resolved = parsedClassId !== null && parsedClassId !== undefined;
     const form = toForm({
       ...result.schema,
       factoryId: result.schema.factoryId ?? target?.factoryId ?? data?.factoryId ?? 1,
-      classId: result.schema.classId ?? target?.classId ?? 0,
+      classId: resolved ? parsedClassId : 0,
       fields: result.schema.fields ?? [],
     });
-    if (result.schema.classId === null || result.schema.classId === undefined) {
-      form.classId = target ? String(target.classId) : '';
+    if (!resolved) {
+      // never a default id (0, 1 or the id of another class): the user picks it explicitly
+      form.classId = '';
     }
     const warnings = [...result.warnings];
-    if (target && result.schema.classId !== null && result.schema.classId !== undefined && result.schema.classId !== target.classId) {
-      warnings.unshift(t('schemas.editor.targetMismatch', { parsed: result.schema.classId, expected: target.classId }));
+    if (target && resolved && Number(parsedClassId) !== Number(target.classId)) {
+      warnings.unshift(t('schemas.editor.targetMismatch', { parsed: parsedClassId, expected: target.classId }));
     }
     setPaste(null);
-    setEditor({ initial: form, warnings });
+    setEditor({ initial: form, warnings, suggestedClassId: resolved ? undefined : target?.classId });
   };
 
   const exportAll = async () => {
@@ -147,11 +163,14 @@ export function SchemasPage() {
   };
 
   const exportOne = (schema: DtoClassSchema, view: DtoRegistryView) => {
-    const projectFactory = schema.factoryId === view.factoryId;
+    const projectFactory = Number(schema.factoryId) === Number(view.factoryId);
+    const constants = projectFactory
+      ? Object.fromEntries(Object.entries(view.factoryConstants).filter(([, id]) => Number(id) === Number(schema.classId)))
+      : {};
     downloadJson(`${schema.className}.dto-schema.json`, {
       formatVersion: 1,
       factoryId: view.factoryId,
-      factoryConstants: {},
+      factoryConstants: constants,
       factoryClasses: projectFactory ? { [schema.className]: schema.classId } : {},
       schemas: [schema],
     });
@@ -186,7 +205,7 @@ export function SchemasPage() {
         </div>
         <span className="gk-badge bg-gk-purple/20 py-1 text-gk-purple">{t('schemas.count', { count: data.schemas.length })}</span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <button type="button" className="gk-btn-primary" onClick={() => setPaste({ mode: 'dto' })}>
+          <button type="button" className="gk-btn-primary" onClick={() => setPaste(pasteState('dto'))}>
             <Sparkles className="h-4 w-4" aria-hidden />
             {t('schemas.smartPaste')}
           </button>
@@ -220,8 +239,8 @@ export function SchemasPage() {
           <aside className="space-y-5">
             <FactoryPanel
               registry={data}
-              onParseFactory={() => setPaste({ mode: 'factory' })}
-              onConfigure={(target) => setPaste({ mode: 'dto', target })}
+              onParseFactory={() => setPaste(pasteState('factory'))}
+              onConfigure={(target) => setPaste(pasteState('dto', target))}
               onEdit={openEditor}
             />
             <StoragePanel registry={data} />
@@ -236,7 +255,7 @@ export function SchemasPage() {
             )}
 
             {data.schemas.length === 0 ? (
-              <EmptyState onPasteFactory={() => setPaste({ mode: 'factory' })} onPasteDto={() => setPaste({ mode: 'dto' })} />
+              <EmptyState onPasteFactory={() => setPaste(pasteState('factory'))} onPasteDto={() => setPaste(pasteState('dto'))} />
             ) : (
               <>
                 <label className="relative block max-w-md">
@@ -256,10 +275,10 @@ export function SchemasPage() {
                   <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
                     {schemas.map((schema) => (
                       <SchemaCard
-                        key={`${schema.factoryId}/${schema.classId}`}
+                        key={schemaKey(schema.factoryId, schema.classId)}
                         schema={schema}
                         registry={data}
-                        highlighted={highlight === `${schema.factoryId}/${schema.classId}`}
+                        highlighted={highlight === schemaKey(schema.factoryId, schema.classId)}
                         onEdit={() => openEditor(schema)}
                         onDelete={() => setToDelete(schema)}
                         onExport={() => exportOne(schema, data)}
@@ -275,6 +294,7 @@ export function SchemasPage() {
 
       {paste && (
         <JavaPasteModal
+          key={paste.session}
           open
           initialMode={paste.mode}
           target={paste.target}
@@ -293,6 +313,7 @@ export function SchemasPage() {
           initial={editor.initial}
           original={editor.original}
           warnings={editor.warnings}
+          suggestedClassId={editor.suggestedClassId}
           registry={data}
           onClose={() => setEditor(null)}
         />
@@ -324,11 +345,8 @@ function FactoryPanel({
   onEdit: (schema: DtoClassSchema) => void;
 }) {
   const { t } = useTranslation();
-  const classes = Object.entries(registry.factoryClasses).sort((a, b) => a[1] - b[1]);
-  const constantsWithoutClass = Object.entries(registry.factoryConstants)
-    .filter(([, id]) => !classes.some(([, classId]) => classId === id))
-    .sort((a, b) => a[1] - b[1]);
-  const constantOf = (id: number) => Object.entries(registry.factoryConstants).find(([, value]) => value === id)?.[0];
+  const rows = factoryRows(registry);
+  const registered = rows.filter((item) => item.schema).length;
   return (
     <Panel
       title={t('schemas.factory.title')}
@@ -344,7 +362,10 @@ function FactoryPanel({
       <div className="flex items-center gap-2 border-b border-gk-border px-4 py-2.5 text-xs">
         <span className="text-gk-muted">FACTORY_ID</span>
         <span className="gk-mono text-gk-cyan">{registry.factoryId}</span>
-        {registry.activeFactoryIds.includes(registry.factoryId) ? (
+        {rows.length > 0 && (
+          <span className="text-gk-subtle">{t('schemas.factory.registeredCount', { registered, total: rows.length })}</span>
+        )}
+        {registry.activeFactoryIds.map(Number).includes(Number(registry.factoryId)) ? (
           <span className="gk-badge ml-auto gap-1 bg-gk-green/15 text-gk-green">
             <CheckCircle2 className="h-3 w-3" aria-hidden />
             {t('schemas.factory.active')}
@@ -353,31 +374,39 @@ function FactoryPanel({
           <span className="gk-badge ml-auto bg-gk-warning/15 text-gk-warning">{t('schemas.card.pending')}</span>
         )}
       </div>
-      {classes.length === 0 && constantsWithoutClass.length === 0 ? (
+      {rows.length === 0 ? (
         <p className="px-4 py-4 text-xs text-gk-muted">{t('schemas.factory.empty')}</p>
       ) : (
         <ul className="max-h-[420px] divide-y divide-gk-border/60 overflow-y-auto text-xs">
-          {classes.map(([className, classId]) => {
-            const schema = registry.schemas.find((item) => item.factoryId === registry.factoryId && item.classId === classId);
+          {rows.map((item) => {
+            const name = item.className ?? item.schema?.className;
             return (
-              <li key={className} className="flex items-center gap-2 px-4 py-2">
-                <span className="gk-mono w-7 shrink-0 text-right text-gk-subtle">{classId}</span>
+              <li key={item.classId} className="flex items-center gap-2 px-4 py-2">
+                <span className="gk-mono w-7 shrink-0 text-right text-gk-subtle">{item.classId}</span>
                 <div className="min-w-0 flex-1">
-                  <span className="gk-mono block truncate text-gk-text" title={className}>
-                    {className}
+                  <span className={`gk-mono block truncate ${name ? 'text-gk-text' : 'text-gk-muted'}`} title={name}>
+                    {name ?? t('schemas.factory.noClass')}
                   </span>
-                  {constantOf(classId) && <span className="gk-mono block truncate text-[11px] text-gk-subtle">{constantOf(classId)}</span>}
+                  {item.constants.length > 0 && (
+                    <span className="gk-mono block truncate text-[11px] text-gk-subtle">{item.constants.join(', ')}</span>
+                  )}
                 </div>
-                {schema ? (
-                  <button type="button" className="gk-badge gap-1 bg-gk-green/15 text-gk-green hover:bg-gk-green/25" onClick={() => onEdit(schema)}>
+                {item.schema ? (
+                  <button
+                    type="button"
+                    className="gk-badge gap-1 bg-gk-green/15 text-gk-green hover:bg-gk-green/25"
+                    onClick={() => onEdit(item.schema!)}
+                    title={t('schemas.card.edit')}
+                  >
                     <CheckCircle2 className="h-3 w-3" aria-hidden />
-                    {t('schemas.factory.hasSchema')}
+                    {t('schemas.factory.registered')}
+                    <span className="text-gk-green/80">· {t('schemas.card.edit')}</span>
                   </button>
                 ) : (
                   <button
                     type="button"
                     className="gk-badge gap-1 bg-gk-warning/15 text-gk-warning hover:bg-gk-warning/25"
-                    onClick={() => onConfigure({ factoryId: registry.factoryId, classId, className })}
+                    onClick={() => onConfigure({ factoryId: registry.factoryId, classId: item.classId, className: name })}
                   >
                     <Plus className="h-3 w-3" aria-hidden />
                     {t('schemas.factory.addSchema')}
@@ -386,13 +415,6 @@ function FactoryPanel({
               </li>
             );
           })}
-          {constantsWithoutClass.map(([name, id]) => (
-            <li key={name} className="flex items-center gap-2 px-4 py-2 text-gk-muted">
-              <span className="gk-mono w-7 shrink-0 text-right text-gk-subtle">{id}</span>
-              <span className="gk-mono min-w-0 flex-1 truncate">{name}</span>
-              <span className="text-[11px]">{t('schemas.factory.noClass')}</span>
-            </li>
-          ))}
         </ul>
       )}
     </Panel>

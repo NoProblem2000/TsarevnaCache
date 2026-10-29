@@ -1,6 +1,6 @@
 {
   "name": "tsarevna-cache-ui",
-  "version": "1.0.4-SNAPSHOT",
+  "version": "1.0.4",
   "private": true,
   "description": "Web UI of TsarevnaCache, the administration and data inspection service for Hazelcast 5.5 clusters.",
   "license": "SEE LICENSE IN ../LICENSE",

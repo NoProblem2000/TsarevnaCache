@@ -236,6 +236,88 @@ class DynamicDtoApiTest extends AbstractApiTest {
     }
 
     @Test
+    void folderOfJavaFilesIsFilteredAndImportedInAnyOrder() throws Exception {
+        cluster().member().getMap("dto-batch").put("b", someDto());
+        assertThat(httpDelete("/api/schemas/1/1").status()).isEqualTo(204);
+        assertThat(httpDelete("/api/schemas/1/2").status()).isEqualTo(204);
+        // a factory mapping that knows none of the classes: the batch has to parse its own factory first
+        ObjectNode otherFactory = JSON.createObjectNode();
+        otherFactory.putObject("factoryConstants").put("OLD", 99);
+        otherFactory.putArray("schemas");
+        assertThat(httpPostJson("/api/schemas/import?mode=replace", otherFactory).status()).isEqualTo(200);
+
+        List<Map<String, String>> files = List.of(
+                file("model/SomeDTO.java", ProductionDtoSources.SOME_DTO),
+                file("model/Status.java", "package prod.model; public enum Status { NEW, DONE }"),
+                file("model/Identified.java", "public interface Identified { int getClassId(); }"),
+                file("model/Point.java", "public record Point(int x, int y) { }"),
+                file("model/CustomRequest.java", """
+                        public class CustomRequest {
+                            private String query;
+                            public String getQuery() { return query; }
+                        }"""),
+                file("model/BaseDTO.java", """
+                        public abstract class BaseDTO implements IdentifiedDataSerializable {
+                            public int getFactoryId() { return DataSerializableFactory.FACTORY_ID; }
+                        }"""),
+                file("model/LegacyDTO.java", """
+                        public class LegacyDTO implements IdentifiedDataSerializable {
+                            private Long id;
+                            public int getFactoryId() { return DataSerializableFactory.FACTORY_ID; }
+                            public int getClassId() { return DataSerializableFactory.LEGACYDTO; }
+                            public void readData(ObjectDataInput in) throws IOException { id = SerializationUtils.readNullableLong(in); }
+                        }"""),
+                file("model/readme.txt", "not java"),
+                file("model/Some2DTO.java", ProductionDtoSources.SOME2_DTO),
+                file("model/DataSerializableFactory.java", ProductionDtoSources.FACTORY));
+
+        Response response = httpPostJson("/api/schemas/batch-import-java", files);
+        assertThat(response.status()).isEqualTo(200);
+        JsonNode result = response.body();
+        assertThat(result.path("totalFiles").asInt()).isEqualTo(10);
+        assertThat(result.path("factoryUpdated").asBoolean()).isTrue();
+        assertThat(result.path("factoryFile").asText()).isEqualTo("model/DataSerializableFactory.java");
+        assertThat(result.path("factoryConstantCount").asInt()).isEqualTo(3);
+        assertThat(result.path("importedCount").asInt()).isEqualTo(2);
+        assertThat(result.path("imported").findValuesAsText("className")).containsExactly("SomeDTO", "Some2DTO");
+        assertThat(result.path("ignoredCount").asInt()).isEqualTo(7);
+
+        Map<String, String> reasons = new java.util.HashMap<>();
+        Map<String, String> details = new java.util.HashMap<>();
+        result.path("ignored").forEach(item -> {
+            reasons.put(item.path("fileName").asText(), item.path("reason").asText());
+            details.put(item.path("fileName").asText(), item.path("detail").asText());
+        });
+        assertThat(reasons).containsEntry("model/Status.java", "Not a Hazelcast IdentifiedDataSerializable DTO")
+                .containsEntry("model/Identified.java", "Not a Hazelcast IdentifiedDataSerializable DTO")
+                .containsEntry("model/Point.java", "Not a Hazelcast IdentifiedDataSerializable DTO")
+                .containsEntry("model/CustomRequest.java", "Not a Hazelcast IdentifiedDataSerializable DTO")
+                .containsEntry("model/BaseDTO.java", "Not a Hazelcast IdentifiedDataSerializable DTO")
+                .containsEntry("model/LegacyDTO.java", "Not registered in DataSerializableFactory")
+                .containsEntry("model/readme.txt", "Not a .java file");
+        assertThat(details).containsEntry("model/Status.java", "enum").containsEntry("model/BaseDTO.java", "abstract class")
+                .containsEntry("model/CustomRequest.java", "does not implement IdentifiedDataSerializable");
+
+        // the parent came before its nested class and before the factory: linked anyway, readable at once
+        JsonNode some = result.path("imported").get(0);
+        assertThat(some.path("classId").asInt()).isEqualTo(1);
+        assertThat(some.path("fields").get(3).path("nestedClassId").asInt()).isEqualTo(2);
+        JsonNode value = httpGet("/api/maps/dto-batch/entry?key=b&keyType=STRING").body().path("value");
+        assertThat(value.path("deserialized").asBoolean()).isTrue();
+        assertThat(value.path("value").path("details").path("label").asText()).isEqualTo("inner");
+
+        // importing the same files again updates the schemas instead of adding new ones
+        JsonNode again = httpPostJson("/api/schemas/batch-import-java", files).body();
+        assertThat(again.path("updatedKeys").toString()).isEqualTo("[\"1:1\",\"1:2\"]");
+        assertThat(httpGet("/api/schemas").body().path("schemas").size()).isEqualTo(2);
+        assertThat(httpPostJson("/api/schemas/batch-import-java", List.of()).code()).isEqualTo("VALUE_REQUIRED");
+    }
+
+    private static Map<String, String> file(String fileName, String content) {
+        return Map.of("fileName", fileName, "content", content);
+    }
+
+    @Test
     void invalidInputIsRejected() throws Exception {
         cluster().member().getMap("dto-bad").put("seed", "seed");
         ObjectNode put = JSON.createObjectNode();

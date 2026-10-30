@@ -1,6 +1,7 @@
 import { api } from './client';
 import type {
   AuthUser,
+  BatchImportResult,
   ClusterOverviewDTO,
   DtoClassSchema,
   DtoParseResult,
@@ -12,6 +13,7 @@ import type {
   EntryQuery,
   FactoryParseResult,
   HealthCheckReport,
+  JavaFileSource,
   KeySpec,
   MapStatsDTO,
   OtherStructureDTO,
@@ -81,5 +83,6 @@ export const endpoints = {
     exportFile: () => api.get<DtoSchemaRegistryFile>('/api/schemas/export'),
     importFile: (content: DtoSchemaRegistryFile, mode: 'replace' | 'merge') =>
       api.post<DtoRegistryView>('/api/schemas/import', content, { mode }),
+    batchImportJava: (files: JavaFileSource[]) => api.post<BatchImportResult>('/api/schemas/batch-import-java', files),
   },
 };

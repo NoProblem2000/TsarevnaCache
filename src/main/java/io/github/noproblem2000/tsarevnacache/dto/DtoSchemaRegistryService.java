@@ -225,6 +225,45 @@ public class DtoSchemaRegistryService {
         }
     }
 
+    /**
+     * Adds or replaces several schemas at once (each under its {@code factoryId:classId}), links the
+     * nested class references of all schemas once at the end and writes the file once. The order of
+     * {@code batch} does not matter: a parent and its nested classes in the same batch are linked to
+     * each other.
+     *
+     * @throws ApiException with {@link ErrorCode#DTO_SCHEMA_INVALID} when one schema is invalid; nothing is saved then
+     */
+    public BatchOutcome saveAll(List<DtoClassSchema> batch) {
+        List<DtoClassSchema> validated = batch.stream().map(this::validate).toList();
+        lock.writeLock().lock();
+        try {
+            Snapshot current = snapshot;
+            Map<SchemaKey, DtoClassSchema> schemas = new TreeMap<>(current.schemas);
+            validated.forEach(schema -> schemas.put(schema.key(), schema));
+            Snapshot next = current.withSchemas(schemas);
+            Map<SchemaKey, DtoClassSchema> linked = linkNested(next);
+            next = next.withSchemas(linked);
+
+            Set<SchemaKey> batchKeys = new HashSet<>();
+            validated.forEach(schema -> batchKeys.add(schema.key()));
+            List<DtoClassSchema> saved = validated.stream().map(schema -> linked.get(schema.key())).toList();
+            List<SchemaKey> replaced = validated.stream().map(DtoClassSchema::key).filter(current.schemas::containsKey).toList();
+            List<SchemaKey> relinked = new ArrayList<>();
+            for (Map.Entry<SchemaKey, DtoClassSchema> entry : linked.entrySet()) {
+                DtoClassSchema before = current.schemas.get(entry.getKey());
+                if (!batchKeys.contains(entry.getKey()) && before != null && !before.equals(entry.getValue())) {
+                    relinked.add(entry.getKey());
+                }
+            }
+            if (!validated.isEmpty()) {
+                replace(next);
+            }
+            return new BatchOutcome(saved, replaced, relinked);
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
     /** Removes a schema; {@code false} when it did not exist. The factory mapping is kept. */
     public boolean delete(int factoryId, int classId) {
         lock.writeLock().lock();
@@ -487,6 +526,16 @@ public class DtoSchemaRegistryService {
      * @param warnings things to check, e.g. the same class registered under another class id
      */
     public record SaveOutcome(DtoClassSchema schema, List<SchemaKey> linked, List<String> warnings) {
+    }
+
+    /**
+     * Result of {@link #saveAll}.
+     *
+     * @param saved    the stored schemas, in batch order (nested class ids linked)
+     * @param replaced keys of the batch that already had a schema (updated rather than added)
+     * @param relinked other, already registered schemas whose nested class ids were filled in
+     */
+    public record BatchOutcome(List<DtoClassSchema> saved, List<SchemaKey> replaced, List<SchemaKey> relinked) {
     }
 
     /** Immutable registry state, swapped atomically on every change. */

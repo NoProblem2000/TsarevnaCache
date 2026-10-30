@@ -556,3 +556,46 @@ export interface HealthCheckReport {
   /** Period of the background runs, 0 when they are disabled. */
   intervalMillis: number;
 }
+
+/** One `.java` file of a batch import (`POST /api/schemas/batch-import-java`). */
+export interface JavaFileSource {
+  /** File name, or the relative path when a folder was selected. */
+  fileName: string;
+  content: string;
+}
+
+/** A file skipped on purpose by the batch import. */
+export interface IgnoredFile {
+  fileName: string;
+  className?: string;
+  /** `Not a Hazelcast IdentifiedDataSerializable DTO`, `Not registered in DataSerializableFactory`, ... */
+  reason: string;
+  /** What made the decision, e.g. `enum`, `abstract class`, `no readData/writeData`. */
+  detail?: string;
+}
+
+/** A problem in a valid DTO of the batch (unrecognized field, or the DTO could not be imported). */
+export interface BatchImportError {
+  fileName: string;
+  className?: string;
+  message: string;
+  /** The schema was imported nevertheless (review it). */
+  imported: boolean;
+}
+
+export interface BatchImportResult {
+  totalFiles: number;
+  importedCount: number;
+  imported: DtoClassSchema[];
+  /** Keys (`factoryId:classId`) of imported schemas that replaced an existing one. */
+  updatedKeys: string[];
+  /** Keys of other schemas whose nested fields now point to an imported class. */
+  linkedSchemas: string[];
+  factoryUpdated: boolean;
+  factoryFile?: string;
+  factoryId?: number;
+  factoryConstantCount: number;
+  ignoredCount: number;
+  ignored: IgnoredFile[];
+  errors: BatchImportError[];
+}

@@ -102,6 +102,24 @@ class DtoSchemaRegistryServiceTest {
     }
 
     @Test
+    void batchIsSavedAtOnceAndLinkedWhateverItsOrder() {
+        DtoSchemaRegistryService registry = open();
+        registry.save(schema(9, "Holder", field(0, "child", DtoFieldType.NULLABLE_OBJECT, "Child")));
+        DtoSchemaRegistryService.BatchOutcome outcome = registry.saveAll(List.of(
+                schema(1, "Parent", field(0, "children", DtoFieldType.NULLABLE_LIST, "Child")),
+                schema(7, "Child"),
+                schema(9, "Holder", field(0, "child", DtoFieldType.NULLABLE_OBJECT, "Child"),
+                        field(1, "note", DtoFieldType.NULLABLE_STRING, null))));
+        assertThat(outcome.saved()).extracting(DtoClassSchema::className).containsExactly("Parent", "Child", "Holder");
+        assertThat(outcome.saved().get(0).fields().get(0).nestedClassId()).isEqualTo(7);
+        assertThat(outcome.replaced()).containsExactly(new DtoClassSchema.SchemaKey(1, 9));
+        assertThat(open().find(1, 9).orElseThrow().fields()).hasSize(2);
+        assertThat(registry.saveAll(List.of()).saved()).isEmpty();
+        assertInvalid(() -> registry.saveAll(List.of(schema(3, "Fine"), schema(4, "Bad name"))));
+        assertThat(registry.find(1, 3)).isEmpty();
+    }
+
+    @Test
     void namesAreMatchedWithoutCaseAndUnderscores() {
         DtoSchemaRegistryService registry = open();
         registry.updateFactory(1, Map.of("SOMEDTO", 1, "SOME_OTHER_DTO", 3, "SOMEDTO2", 2), Map.of("Some2DTO", 2));

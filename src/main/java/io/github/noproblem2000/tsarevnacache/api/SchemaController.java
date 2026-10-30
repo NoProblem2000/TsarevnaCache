@@ -5,9 +5,11 @@ import io.github.noproblem2000.tsarevnacache.api.error.ErrorCode;
 import io.github.noproblem2000.tsarevnacache.dto.DtoClassSchema;
 import io.github.noproblem2000.tsarevnacache.dto.DtoSchemaRegistryFile;
 import io.github.noproblem2000.tsarevnacache.dto.DtoSchemaRegistryService;
+import io.github.noproblem2000.tsarevnacache.dto.parser.BatchImportResultDTO;
 import io.github.noproblem2000.tsarevnacache.dto.parser.DtoParseResult;
 import io.github.noproblem2000.tsarevnacache.dto.parser.FactoryParseResult;
 import io.github.noproblem2000.tsarevnacache.dto.parser.JavaDtoSourceParserService;
+import io.github.noproblem2000.tsarevnacache.dto.parser.JavaFileSourceDTO;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.util.List;
@@ -63,6 +65,21 @@ public class SchemaController {
         if (save) {
             registry.updateFactory(result.factoryId(), result.constants(), result.classes());
             events.publishEvent(new DtoSchemasChangedEvent("factory " + result.factoryId() + " parsed"));
+        }
+        return result;
+    }
+
+    /**
+     * Imports many {@code .java} files at once (a whole model folder): finds the
+     * {@code DataSerializableFactory}, ignores everything that is not an IdentifiedDataSerializable
+     * DTO of that factory, saves the DTO schemas and links their nested classes. The order of the
+     * files does not matter. The healthcheck is refreshed once afterwards.
+     */
+    @PostMapping("/batch-import-java")
+    public BatchImportResultDTO batchImportJava(@RequestBody List<JavaFileSourceDTO> files) {
+        BatchImportResultDTO result = parser.importJavaFiles(files);
+        if (result.importedCount() > 0 || result.factoryUpdated()) {
+            events.publishEvent(new DtoSchemasChangedEvent("batch import of " + result.importedCount() + " schema(s)"));
         }
         return result;
     }

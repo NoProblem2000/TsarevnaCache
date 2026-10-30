@@ -336,6 +336,27 @@ classes themselves are not needed: a schema is enough.
 Saving, deleting or importing schemas refreshes the open map pages and re-runs the healthcheck at
 once, so fixed values and the *Unregistered DTO* check update without waiting for the next minute.
 
+**Importing a whole model folder.** You do not have to paste the classes one by one. In *Smart
+Java Paste* use **Open .java Files** (select hundreds of files with `Ctrl+A` / `Shift+Click`),
+**Select Folder** (the whole `model` package, subfolders included) or simply **drag and drop**
+files or folders onto the dialog. One file opens in the editor as before; several files are read in
+the browser in parallel and imported in one request (`POST /api/schemas/batch-import-java`) in three
+passes, so the order of the files never matters:
+
+1. **Factory first** — a class with `FACTORY_ID` and `create(int typeId)` is parsed and stored, so
+   every class id is known before any DTO is read;
+2. **Filter and parse** — enums, interfaces, records, abstract classes and plain classes such as
+   `CustomRequest` / `CustomResponse` that do not implement `IdentifiedDataSerializable` (or
+   `IdentifiedDataDTO`) or lack `readData`/`writeData` and `getClassId()` are skipped as
+   *Not a Hazelcast IdentifiedDataSerializable DTO*; DTOs whose class id the factory does not create
+   are skipped as *Not registered in DataSerializableFactory*; all others are parsed;
+3. **Save and link** — the schemas are saved in one step and `nestedClassId` of every
+   `NullableObject` / `NullableList` field is resolved by class name across the whole registry.
+   The healthcheck runs once afterwards.
+
+The summary shows **Imported: N DTO Schemas** (added or updated, with class ids), fields that need a
+review, and a collapsed **Ignored: M non-DTO files** list with the reason for each file.
+
 **Creating values.** In *Put Entry* choose the value type **Registered DTO (IdentifiedDataSerializable)**,
 pick the class (e.g. `SomeDTO (classId: 1)`) and press **Generate JSON Template**: every field,
 nested DTOs included, is filled with a sample value.
@@ -771,6 +792,7 @@ All endpoints below `/api` require the administrator. Errors are returned as
 | `GET` | `/api/schemas` | Factory mapping, active / pending factory ids and all DTO schemas |
 | `POST` | `/api/schemas/parse-factory?save=true` | Parse `DataSerializableFactory.java` `{ "source" }` |
 | `POST` | `/api/schemas/parse-dto` | Parse a DTO class `{ "source" }` (preview, not saved) |
+| `POST` | `/api/schemas/batch-import-java` | Import many `.java` files `[{ "fileName", "content" }]`: factory first, non-DTOs ignored, DTO schemas saved and linked; returns the import summary |
 | `POST` | `/api/schemas` | Save a DTO schema |
 | `DELETE` | `/api/schemas/{factoryId}/{classId}` | Delete a DTO schema |
 | `GET` | `/api/schemas/export` | Download `dto-schemas.json` |

@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -162,6 +163,206 @@ public class JavaDtoSourceParserService {
             return;
         }
         classes.put(className, id);
+    }
+
+    // ------------------------------------------------------------------ batch import
+
+    /** Reason of files that are no Hazelcast DTO (enums, interfaces, requests, responses, ...). */
+    public static final String NOT_A_DTO = "Not a Hazelcast IdentifiedDataSerializable DTO";
+    /** Reason of DTOs whose class id is not known to the {@code DataSerializableFactory}. */
+    public static final String NOT_REGISTERED = "Not registered in DataSerializableFactory";
+    /** Upper bound of files in one batch. */
+    public static final int MAX_BATCH_FILES = 5_000;
+
+    private static final Pattern TYPE_DECLARATION = Pattern.compile(
+            "(?:\\A|[;}\\n])\\s*((?:(?:public|protected|private|abstract|final|static|sealed|non-sealed|strictfp)\\s+)*)"
+                    + "(class|interface|enum|record)\\s+([A-Za-z_$][\\w$]*)([^{;]*)\\{");
+    private static final Pattern ANNOTATION_TYPE = Pattern.compile("@\\s*interface\\s+[A-Za-z_$][\\w$]*");
+    private static final Pattern IDENTIFIED_TYPE = Pattern.compile("\\bIdentifiedData(?:Serializable|DTO)\\b");
+    private static final Pattern FACTORY_TYPE = Pattern.compile("\\bDataSerializableFactory\\b");
+    private static final Pattern CREATE_METHOD = Pattern.compile("\\bcreate\\s*\\(\\s*(?:final\\s+)?int\\s+[\\w$]+\\s*\\)");
+    private static final Pattern FIELD_WARNING = Pattern.compile(
+            "^(?:Unsupported|Field #|readData contains|readData and writeData|readData was not understood)");
+
+    /**
+     * Imports a whole folder of {@code .java} files in three passes, so the order of the files never
+     * matters:
+     * <ol>
+     *   <li><b>Factory.</b> A {@code DataSerializableFactory} (a class with {@code FACTORY_ID} and
+     *       {@code create(int typeId)}) is parsed and stored first, so every class id is known before
+     *       any DTO is read.</li>
+     *   <li><b>Filter and parse.</b> Enums, interfaces, records, abstract classes and plain classes
+     *       ({@code CustomRequest}, {@code CustomResponse}, ...) that do not implement
+     *       {@code IdentifiedDataSerializable} / {@code IdentifiedDataDTO} or lack
+     *       {@code readData}/{@code writeData} and {@code getClassId()} are ignored ({@value #NOT_A_DTO}).
+     *       DTOs whose class id the factory does not know are ignored too ({@value #NOT_REGISTERED}).
+     *       All others are parsed.</li>
+     *   <li><b>Save and link.</b> All parsed schemas are saved in one step and the nested
+     *       {@code nestedClassId} of every schema is resolved by class name across the whole registry.</li>
+     * </ol>
+     */
+    public BatchImportResultDTO importJavaFiles(List<JavaFileSourceDTO> files) {
+        if (files == null || files.isEmpty()) {
+            throw new ApiException(ErrorCode.VALUE_REQUIRED, "No .java files were sent");
+        }
+        if (files.size() > MAX_BATCH_FILES) {
+            throw new ApiException(ErrorCode.VALIDATION_FAILED, "At most " + MAX_BATCH_FILES + " files per import",
+                    Map.of("files", files.size()));
+        }
+        List<IgnoredFileDTO> ignored = new ArrayList<>();
+        List<BatchImportErrorDTO> errors = new ArrayList<>();
+        List<ScannedFile> scanned = new ArrayList<>();
+        for (JavaFileSourceDTO file : files) {
+            String name = file == null || file.fileName() == null || file.fileName().isBlank() ? "(unnamed)" : file.fileName();
+            String content = file == null ? null : file.content();
+            if (!name.toLowerCase(Locale.ROOT).endsWith(".java")) {
+                ignored.add(new IgnoredFileDTO(name, null, "Not a .java file", null));
+            } else if (content == null || content.isBlank()) {
+                ignored.add(new IgnoredFileDTO(name, null, "Empty file", null));
+            } else if (content.length() > 1_000_000) {
+                ignored.add(new IgnoredFileDTO(name, null, "Larger than 1 MB", null));
+            } else {
+                scanned.add(scan(name, content));
+            }
+        }
+
+        // pass 1: the factory first, so the class ids are known before the DTOs are parsed
+        boolean factoryUpdated = false;
+        String factoryFile = null;
+        FactoryParseResult factory = null;
+        for (ScannedFile file : scanned) {
+            if (!file.factory()) {
+                continue;
+            }
+            if (factory != null) {
+                ignored.add(new IgnoredFileDTO(file.name(), file.className(), "Additional DataSerializableFactory",
+                        "only the factory mapping of " + factoryFile + " is kept"));
+                continue;
+            }
+            try {
+                factory = parseFactorySource(file.content());
+                registry.updateFactory(factory.factoryId(), factory.constants(), factory.classes());
+                factoryUpdated = true;
+                factoryFile = file.name();
+            } catch (ApiException e) {
+                errors.add(new BatchImportErrorDTO(file.name(), file.className(), "Factory not understood: " + e.getMessage(), false));
+            }
+        }
+
+        // pass 2: filter and parse the DTOs
+        Map<DtoClassSchema.SchemaKey, String> fileOfKey = new LinkedHashMap<>();
+        List<DtoClassSchema> parsed = new ArrayList<>();
+        Map<String, Integer> knownIds = new LinkedHashMap<>(registry.factoryConstants());
+        knownIds.putAll(registry.factoryClasses());
+        boolean factoryKnown = !knownIds.isEmpty();
+        for (ScannedFile file : scanned) {
+            if (file.factory()) {
+                continue;
+            }
+            String notDto = notADtoReason(file);
+            if (notDto != null) {
+                ignored.add(new IgnoredFileDTO(file.name(), file.className(), NOT_A_DTO, notDto));
+                continue;
+            }
+            DtoParseResult result;
+            try {
+                result = parseDtoClassSource(file.content());
+            } catch (ApiException e) {
+                errors.add(new BatchImportErrorDTO(file.name(), file.className(), e.getMessage(), false));
+                continue;
+            }
+            DtoClassSchema schema = result.schema();
+            if (schema.classId() == null) {
+                ignored.add(new IgnoredFileDTO(file.name(), schema.className(), NOT_REGISTERED,
+                        result.warnings().stream().filter(w -> w.startsWith("getClassId()")).findFirst()
+                                .orElse("getClassId() does not return a factory constant")));
+                continue;
+            }
+            if (factoryKnown && schema.factoryId() == registry.factoryId() && !knownIds.containsValue(schema.classId())) {
+                ignored.add(new IgnoredFileDTO(file.name(), schema.className(), NOT_REGISTERED,
+                        "classId " + schema.classId() + " is not created by the factory"));
+                continue;
+            }
+            String previous = fileOfKey.putIfAbsent(schema.key(), file.name());
+            if (previous != null) {
+                errors.add(new BatchImportErrorDTO(file.name(), schema.className(), "classId " + schema.classId()
+                        + " is already used by " + previous + " in this import; this file was skipped", false));
+                continue;
+            }
+            try {
+                registry.validate(schema);
+            } catch (ApiException e) {
+                fileOfKey.remove(schema.key());
+                errors.add(new BatchImportErrorDTO(file.name(), schema.className(), e.getMessage(), false));
+                continue;
+            }
+            parsed.add(schema);
+            result.warnings().stream()
+                    .filter(warning -> FIELD_WARNING.matcher(warning).find())
+                    .forEach(warning -> errors.add(new BatchImportErrorDTO(file.name(), schema.className(), warning, true)));
+        }
+
+        // pass 3: save everything at once; nested class ids are linked across the whole registry
+        DtoSchemaRegistryService.BatchOutcome outcome = registry.saveAll(parsed);
+        List<DtoClassSchema> imported = outcome.saved().stream()
+                .sorted(Comparator.comparing(DtoClassSchema::key))
+                .toList();
+        return new BatchImportResultDTO(files.size(), imported.size(), imported,
+                outcome.replaced().stream().map(Object::toString).toList(),
+                outcome.relinked().stream().map(Object::toString).toList(),
+                factoryUpdated, factoryFile, factory == null ? null : factory.factoryId(),
+                factory == null ? 0 : factory.constants().size(), ignored.size(), ignored, errors);
+    }
+
+    /** Primary type of a file and whether it is a factory. */
+    private ScannedFile scan(String name, String content) {
+        String code = JavaSourceScanner.blankLiterals(JavaSourceScanner.stripComments(content));
+        String declarations = ANNOTATION.matcher(ANNOTATION_TYPE.matcher(code).replaceAll(" interface Annotation {"))
+                .replaceAll(" ");
+        Matcher type = TYPE_DECLARATION.matcher(declarations);
+        if (!type.find()) {
+            return new ScannedFile(name, content, code, null, null, false, "", false);
+        }
+        String modifiers = type.group(1);
+        String kind = type.group(2);
+        String header = type.group(4);
+        boolean factory = kind.equals("class")
+                && (FACTORY_TYPE.matcher(header).find() || FACTORY_ID.matcher(code).find())
+                && CREATE_METHOD.matcher(code).find()
+                && !GET_CLASS_ID.matcher(code).find();
+        return new ScannedFile(name, content, code, type.group(3), kind, modifiers.contains("abstract"), header, factory);
+    }
+
+    /** Why a file is not a Hazelcast DTO, or {@code null} when it is one. */
+    private static String notADtoReason(ScannedFile file) {
+        if (file.kind() == null) {
+            return "no class declaration";
+        }
+        if (!file.kind().equals("class")) {
+            return file.kind();
+        }
+        if (file.isAbstract()) {
+            return "abstract class";
+        }
+        boolean hasReadOrWrite = READ_DATA.matcher(file.code()).find() || WRITE_DATA.matcher(file.code()).find();
+        boolean hasClassId = GET_CLASS_ID.matcher(file.code()).find();
+        boolean implementsIdentified = IDENTIFIED_TYPE.matcher(file.header()).find()
+                || (hasClassId && GET_FACTORY_ID.matcher(file.code()).find());
+        if (!implementsIdentified) {
+            return "does not implement IdentifiedDataSerializable";
+        }
+        if (!hasReadOrWrite) {
+            return "no readData/writeData";
+        }
+        if (!hasClassId) {
+            return "no getClassId()";
+        }
+        return null;
+    }
+
+    /** A file of a batch, pre-scanned once. */
+    private record ScannedFile(String name, String content, String code, String className, String kind,
+                               boolean isAbstract, String header, boolean factory) {
     }
 
     // ------------------------------------------------------------------ DTO class

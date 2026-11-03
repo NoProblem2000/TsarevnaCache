@@ -2,6 +2,7 @@ package io.github.noproblem2000.tsarevnacache.support;
 
 import com.hazelcast.config.Config;
 import com.hazelcast.config.JoinConfig;
+import com.hazelcast.config.MapConfig;
 import com.hazelcast.config.NetworkConfig;
 import com.hazelcast.config.SerializerConfig;
 import com.hazelcast.core.Hazelcast;
@@ -36,6 +37,8 @@ public final class EmbeddedCluster {
         config.setProperty("hazelcast.phone.home.enabled", "false");
         config.setProperty("hazelcast.logging.type", "slf4j");
         config.getMetricsConfig().setCollectionFrequencySeconds(1);
+        // maps that track hits per entry (hot keys analyzer tests)
+        config.addMapConfig(new MapConfig("hot-*").setPerEntryStatsEnabled(true));
 
         NetworkConfig network = config.getNetworkConfig();
         network.setPort(15701).setPortAutoIncrement(true).setPortCount(100);

@@ -15,6 +15,11 @@ import type {
   HealthCheckReport,
   JavaFileSource,
   KeySpec,
+  LiveEvents,
+  LogFiles,
+  LogLevelFilter,
+  LogTail,
+  LogTailQuery,
   MapStatsDTO,
   OtherStructureDTO,
   PutEntryRequest,
@@ -64,6 +69,15 @@ export const endpoints = {
       api.delete<void>(`${otherPath(typePath, name)}/item`, { ref, keyRef }),
     clear: (typePath: string, name: string, confirm: string) =>
       api.delete<void>(`${otherPath(typePath, name)}/clear`, { confirm }),
+  },
+  logs: {
+    files: () => api.get<LogFiles>('/api/logs/files'),
+    tail: (query: LogTailQuery) => api.get<LogTail>('/api/logs/tail', { ...query }),
+    live: (after: number, level: LogLevelFilter, search?: string) =>
+      api.get<LiveEvents>('/api/logs/live', { after, level, search }),
+    clearLive: () => api.delete<void>('/api/logs/live'),
+    /** Browser download of a whole server side log file. */
+    downloadUrl: (file: string) => `/api/logs/download?file=${encodeURIComponent(file)}`,
   },
   healthcheck: {
     report: () => api.get<HealthCheckReport>('/api/healthcheck/report'),

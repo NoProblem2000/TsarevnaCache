@@ -26,6 +26,8 @@ export type ErrorCode =
   | 'INVALID_PREDICATE'
   | 'CONFIRMATION_REQUIRED'
   | 'UNSUPPORTED_STRUCTURE_TYPE'
+  | 'LOG_FILE_NOT_FOUND'
+  | 'LOG_FILE_UNREADABLE'
   | 'MAP_NOT_FOUND'
   | 'STRUCTURE_NOT_FOUND'
   | 'ENTRY_NOT_FOUND'
@@ -179,7 +181,12 @@ export interface EntryDTO {
   metadata?: EntryMetadataDTO;
 }
 
-export type SearchMode = 'ALL' | 'KEY' | 'PREDICATE';
+export type SearchMode = 'ALL' | 'KEY' | 'PREDICATE' | 'SORTED';
+
+/** Order of the data browser; everything but NONE ranks a sample of keys by an EntryView metric. */
+export const ENTRY_SORTS = ['NONE', 'HITS', 'COST', 'LAST_ACCESS', 'CREATION_TIME', 'KEY'] as const;
+export type EntrySortBy = (typeof ENTRY_SORTS)[number];
+export type SortDirection = 'DESC' | 'ASC';
 
 export interface EntryPageDTO {
   mode: SearchMode;
@@ -189,6 +196,18 @@ export interface EntryPageDTO {
   nextCursor?: string;
   total?: number;
   entries: EntryDTO[];
+  /** SORTED only: applied order. */
+  sortBy?: EntrySortBy;
+  sortDirection?: SortDirection;
+  /** SORTED only: more keys matched than were ranked. */
+  sampled?: boolean;
+  /** SORTED only: entries the ranking was built from. */
+  scannedCount?: number;
+  scanLimit?: number;
+  /** SORTED only: highest hit count of the ranked entries; absent when hits are not tracked. */
+  maxHits?: number;
+  /** SORTED only: false when the map has per-entry statistics disabled. */
+  hitsAvailable?: boolean;
 }
 
 export interface EntryQuery {
@@ -200,6 +219,9 @@ export interface EntryQuery {
   keyClassName?: string;
   keyRef?: string;
   sqlPredicate?: string;
+  sortBy?: EntrySortBy;
+  sortDirection?: SortDirection;
+  scanLimit?: number;
 }
 
 export interface KeySpec {
@@ -598,4 +620,82 @@ export interface BatchImportResult {
   ignoredCount: number;
   ignored: IgnoredFile[];
   errors: BatchImportError[];
+}
+
+// ------------------------------------------------------------------ log viewer
+
+export const LOG_LEVELS = ['ERROR', 'WARN', 'INFO', 'DEBUG'] as const;
+export type LogLevel = (typeof LOG_LEVELS)[number];
+/** A level keeps its own records and the more severe ones; ALL also keeps lines without a level. */
+export type LogLevelFilter = 'ALL' | LogLevel;
+
+export interface LogFile {
+  /** Absolute path; send it back as `file`. */
+  id: string;
+  name: string;
+  configuredPath: string;
+  exists: boolean;
+  readable: boolean;
+  size?: number;
+  lastModified?: number;
+  /** The admin service's own log (logging.file.name). */
+  applicationLog: boolean;
+}
+
+export interface LogFiles {
+  files: LogFile[];
+  configuredPaths: string[];
+  defaultLines: number;
+  maxLines: number;
+}
+
+export interface LogLine {
+  /** 1-based; counted from the end (-1 = last line) when the file is too large to count. */
+  number: number;
+  text: string;
+  /** Level of the record the line belongs to (stack trace lines inherit it). */
+  level?: LogLevel;
+  /** The line continues the record of an earlier line. */
+  continuation: boolean;
+}
+
+export interface LogTail {
+  file: LogFile;
+  lines: LogLine[];
+  requestedLines: number;
+  totalLines?: number;
+  scannedBytes: number;
+  reachedStart: boolean;
+  scanLimitReached: boolean;
+  level: LogLevelFilter;
+  search?: string;
+}
+
+export interface LogTailQuery {
+  file?: string;
+  lines?: number;
+  level?: LogLevelFilter;
+  search?: string;
+}
+
+export type LiveEventSource = 'LOG' | 'MEMBERSHIP' | 'LIFECYCLE' | 'MIGRATION' | 'DISTRIBUTED_OBJECT';
+
+export interface LiveEvent {
+  seq: number;
+  timestamp: number;
+  level: LogLevel;
+  source: LiveEventSource;
+  logger?: string;
+  thread?: string;
+  message?: string;
+  stackTrace?: string;
+}
+
+export interface LiveEvents {
+  events: LiveEvent[];
+  /** Newest sequence number of the buffer; ask for events `after` it next time. */
+  lastSeq: number;
+  buffered: number;
+  capacity: number;
+  dropped: number;
 }

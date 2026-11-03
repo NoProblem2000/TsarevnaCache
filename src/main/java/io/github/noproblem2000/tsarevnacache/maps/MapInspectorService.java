@@ -175,6 +175,9 @@ public class MapInspectorService {
             List<EntryDTO> found = loadEntries(mapName, List.of(key), true);
             return new EntryPageDTO(SearchMode.KEY, 0, size, false, null, null, found);
         }
+        if (query.sorted()) {
+            return sortedEntries(mapName, query, page, size);
+        }
         if (StringUtils.hasText(query.sqlPredicate())) {
             List<Data> keys = predicateKeys(mapName, query.sqlPredicate().trim(), page, size);
             return new EntryPageDTO(SearchMode.PREDICATE, page, size, keys.size() == size, null, null,
@@ -185,6 +188,81 @@ public class MapInspectorService {
         String next = scan.next() == null ? null : scan.next().encode();
         return new EntryPageDTO(SearchMode.ALL, page, size, next != null, next, total,
                 loadEntries(mapName, scan.keys(), false));
+    }
+
+    /**
+     * Hot keys analyzer: ranks a bounded sample of keys by an {@code EntryView} metric and returns
+     * the requested page of that ranking.
+     *
+     * <p>Hits, cost and access times are not part of the value, so the members cannot sort by them
+     * with a {@code PagingPredicate}. Instead at most {@code scanLimit} keys are selected (by the SQL
+     * predicate when one is given, otherwise in partition order), their metrics are read with
+     * {@code getEntryView} in bounded batches (which does not count as an access), the light
+     * weight metrics are sorted here and only the keys of the requested page are loaded with their
+     * values. {@code sampled} tells the caller whether more keys exist than were ranked.
+     */
+    private EntryPageDTO sortedEntries(String mapName, EntryQuery query, int page, int size) {
+        int maxLimit = properties.getMaxSortScanLimit();
+        int scanLimit = Math.max(1, Math.min(
+                query.scanLimit() == null ? properties.getSortScanLimit() : query.scanLimit(), maxLimit));
+        boolean filtered = StringUtils.hasText(query.sqlPredicate());
+
+        // one key more than the limit tells whether the sample covers every matching key
+        List<Data> keys = filtered
+                ? predicateKeys(mapName, query.sqlPredicate().trim(), 0, scanLimit + 1)
+                : scan(mapName, null, scanLimit + 1).keys();
+        boolean sampled = keys.size() > scanLimit;
+        if (sampled) {
+            keys = keys.subList(0, scanLimit);
+        }
+
+        EntrySortBy sortBy = query.sortBy();
+        SortDirection direction = query.sortDirection() == null ? SortDirection.DESC : query.sortDirection();
+        List<EntryStats> ranking = entryStats(mapName, keys, sortBy == EntrySortBy.KEY);
+        ranking.sort(EntryStats.comparator(sortBy, direction));
+
+        long maxHits = ranking.stream().mapToLong(EntryStats::hits).max().orElse(-1);
+        boolean hitsAvailable = ranking.isEmpty() || maxHits >= 0;
+        int from = Math.min(page * size, ranking.size());
+        int to = Math.min(from + size, ranking.size());
+        List<Data> pageKeys = ranking.subList(from, to).stream().map(EntryStats::key).toList();
+        Long total = filtered ? null : (long) clientAccess.hazelcast().getMap(mapName).size();
+        return new EntryPageDTO(SearchMode.SORTED, page, size, to < ranking.size(), null, total,
+                loadEntries(mapName, pageKeys, false), sortBy, direction, sampled, ranking.size(), scanLimit,
+                maxHits < 0 ? null : maxHits, hitsAvailable);
+    }
+
+    /**
+     * Reads the {@code EntryView} metrics of the keys, {@code sortFetchBatch} calls at a time. The
+     * values are dropped right away, so memory stays proportional to the number of keys. Keys
+     * removed in the meantime are skipped.
+     *
+     * @param withKeyOrder also deserialize the keys for {@link EntrySortBy#KEY}
+     */
+    private List<EntryStats> entryStats(String mapName, List<Data> keys, boolean withKeyOrder) {
+        long threadId = ThreadUtil.getThreadId();
+        int batch = properties.getSortFetchBatch();
+        List<EntryStats> stats = new ArrayList<>(keys.size());
+        for (int start = 0; start < keys.size(); start += batch) {
+            List<Data> chunk = keys.subList(start, Math.min(start + batch, keys.size()));
+            List<CompletableFuture<ClientMessage>> futures = chunk.stream()
+                    .map(key -> clientAccess.invokeOnPartitionAsync(
+                            MapGetEntryViewCodec.encodeRequest(mapName, key, threadId), mapName,
+                            clientAccess.partitionId(key)))
+                    .toList();
+            for (int i = 0; i < chunk.size(); i++) {
+                SimpleEntryView<Data, Data> view =
+                        MapGetEntryViewCodec.decodeResponse(clientAccess.await(futures.get(i))).response;
+                if (view == null) {
+                    continue;
+                }
+                Data key = chunk.get(i);
+                stats.add(new EntryStats(key, DataRefs.encode(key), view.getHits(), view.getCost(),
+                        view.getLastAccessTime(), view.getCreationTime(),
+                        withKeyOrder ? EntryStats.KeyOrder.of(inspector.inspect(key)) : null));
+            }
+        }
+        return stats;
     }
 
     /**

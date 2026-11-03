@@ -77,7 +77,17 @@ admin:
     #   latency-ms: 25
     #   queue-backlog: 5000
 
-# Write a log file next to the distribution (optional):
-# logging:
-#   file:
-#     name: logs/hazelcast-inspector.log
+  # ---------------------------------------------------------------------------
+  # Log viewer (Logs page). Add the log files or directories of your Hazelcast
+  # members, e.g. LOG_VIEWER_PATHS=./logs,/var/log/hazelcast
+  # ---------------------------------------------------------------------------
+  logs:
+    paths: ${LOG_VIEWER_PATHS:./logs}
+    # default-lines: 500
+    # max-lines: 5000
+    # live-buffer-size: 1000
+
+# The admin service writes its own log next to the distribution:
+logging:
+  file:
+    name: ${INSPECTOR_LOG_FILE:./logs/hazelcast-inspector.log}

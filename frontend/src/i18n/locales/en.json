@@ -70,7 +70,9 @@
     "schemasCount_other": "{{count}} registered DTOs",
     "healthcheck": "Healthcheck",
     "healthcheckCount_one": "{{count}} issue needs attention",
-    "healthcheckCount_other": "{{count}} issues need attention"
+    "healthcheckCount_other": "{{count}} issues need attention",
+    "logs": "Logs",
+    "logsHint": "Hazelcast log files, live cluster events and local log files"
   },
   "types": {
     "plural": {
@@ -164,7 +166,7 @@
       "value": "Value Preview",
       "cost": "Memory Cost (Bytes)",
       "hits": "Hits",
-      "ttl": "TTL / Expiration",
+      "ttl": "TTL / Last Access",
       "actions": "Actions"
     },
     "addEntry": "Add / Put Entry",
@@ -199,7 +201,46 @@
     "missingSchemas_one": "{{count}} key or value on this page uses an IdentifiedDataSerializable class without a schema.",
     "missingSchemas_other": "{{count}} keys or values on this page use IdentifiedDataSerializable classes without a schema.",
     "fieldErrors_one": "{{count}} value on this page does not match its DTO schema.",
-    "fieldErrors_other": "{{count}} values on this page do not match their DTO schemas."
+    "fieldErrors_other": "{{count}} values on this page do not match their DTO schemas.",
+    "sort": {
+      "title": "Sort",
+      "orderBy": "Order by",
+      "desc": "Descending (largest first)",
+      "asc": "Ascending (smallest first)",
+      "scanLimit": "Scan",
+      "scanLimitHint": "Number of keys ranked per request (max. 5000). Sorting reads the EntryView of every ranked key, so larger maps are sampled.",
+      "byColumn": "Sort by {{column}}",
+      "presets": {
+        "default": "Default Order",
+        "defaultHint": "Partition order with fast cursor paging, no sampling",
+        "hot": "🔥 Most Popular (Top Hits)",
+        "hotHint": "The most requested keys first (EntryView hits, descending)",
+        "cold": "❄️ Cold Keys (0 Hits)",
+        "coldHint": "Keys nobody reads first: dead weight that only costs memory (hits, ascending)",
+        "largest": "📦 Largest in Memory (Top Cost)",
+        "largestHint": "The entries that cost the most memory first (EntryView cost, descending)"
+      },
+      "fields": {
+        "NONE": "Default order",
+        "HITS": "Hits",
+        "COST": "Memory cost",
+        "LAST_ACCESS": "Last access",
+        "CREATION_TIME": "Creation time",
+        "KEY": "Key"
+      },
+      "complete_one": "Ranked by {{field}} over the only {{scanned}} matching entry.",
+      "complete_other": "Ranked by {{field}} over all {{scanned}} matching entries.",
+      "sampled_one": "Sampled: ranked by {{field}} over the first {{scanned}} of {{total}} entries. Raise the scan limit or narrow the keys down with an SQL predicate.",
+      "sampled_other": "Sampled: ranked by {{field}} over the first {{scanned}} of {{total}} entries. Raise the scan limit or narrow the keys down with an SQL predicate.",
+      "sampledFiltered_one": "Sampled: ranked by {{field}} over the first {{scanned}} matching entry; more entries match the predicate.",
+      "sampledFiltered_other": "Sampled: ranked by {{field}} over the first {{scanned}} matching entries; more entries match the predicate.",
+      "hitsDisabled": "Hits are not tracked for this map: enable per-entry-stats-enabled in the map configuration of the members to find hot keys.",
+      "hitsUnknown": "Not tracked: per-entry statistics are disabled for this map",
+      "hitsShare": "{{percent}}% of the most popular entry",
+      "hot": "Hot key"
+    },
+    "lastAccess": "Accessed {{time}} ago",
+    "neverAccessed": "Never accessed"
   },
   "inspector": {
     "title": "Entry Inspector",
@@ -417,7 +458,9 @@
     "DTO_SCHEMA_INVALID": "The DTO schema is invalid.",
     "DTO_SCHEMA_NOT_FOUND": "No DTO schema is registered for this class.",
     "DTO_SOURCE_NOT_RECOGNIZED": "Nothing usable for a schema was found in the Java source.",
-    "HEALTHCHECK_IGNORE_NOT_FOUND": "This check is not in the ignore list (anymore)."
+    "HEALTHCHECK_IGNORE_NOT_FOUND": "This check is not in the ignore list (anymore).",
+    "LOG_FILE_NOT_FOUND": "The log file is not configured in admin.logs.paths or does not exist.",
+    "LOG_FILE_UNREADABLE": "The log file cannot be read by the admin service."
   },
   "deserialization": {
     "CLASS_NOT_FOUND": "The class of this object is not on the admin classpath.",
@@ -779,5 +822,86 @@
     "path": "Path:",
     "nestedIn": "{{missing}} is nested in {{roots}}, which are registered",
     "nestedBadge": "nested"
+  },
+  "logs": {
+    "title": "Logs",
+    "subtitle": "Hazelcast and admin service log files, the live cluster event stream and local log files",
+    "tabs": {
+      "files": "External Log Files",
+      "live": "Live Cluster Events",
+      "local": "Open Local .log File"
+    },
+    "level": "Level",
+    "levelHint": "A level shows its own records and the more severe ones (WARN = warnings and errors). Stack traces belong to their record.",
+    "levels": {
+      "ALL": "ALL",
+      "ERROR": "ERROR",
+      "WARN": "WARN",
+      "INFO": "INFO"
+    },
+    "searchPlaceholder": "Search in the log…",
+    "clearSearch": "Clear search",
+    "lines": "Lines",
+    "autoRefresh": "Auto-Refresh (Live Tail 3s)",
+    "autoRefreshHint": "Reload the end of the log every 3 seconds; the view follows new lines while it is scrolled to the bottom",
+    "refresh": "Refresh now",
+    "wrap": "Wrap Lines",
+    "scrollToBottom": "Scroll to Bottom",
+    "download": "Download Log",
+    "downloadHint": "Download the whole file",
+    "fromEnd": "Counted from the end of the file (the file is too large to count its lines)",
+    "shown_one": "{{shown}} line shown",
+    "shown_other": "{{shown}} lines shown",
+    "noMatches": "No line matches the filters",
+    "emptyFile": "The log is empty",
+    "loading": "Reading the log…",
+    "server": {
+      "file": "Log file",
+      "noFiles": "No log file found",
+      "noFilesHint": "None of the configured log files exists yet. Configure them with admin.logs.paths (LOG_VIEWER_PATHS):",
+      "applicationLog": "admin service",
+      "modified": "Modified {{time}}",
+      "totalLines_one": "{{total}} line",
+      "totalLines_other": "{{total}} lines",
+      "tailOnly": "read from the end of the file",
+      "scanLimit": "Stopped after reading {{size}} from the end (admin.logs.scan-limit): older lines were not searched",
+      "missing": "Configured but not found:"
+    },
+    "live": {
+      "source": "Cluster & Hazelcast stream",
+      "clear": "Clear",
+      "clearHint": "Empty the event buffer on the server",
+      "sources": "Sources:",
+      "sourceNames": {
+        "LOG": "Hazelcast logs",
+        "MEMBERSHIP": "Members",
+        "LIFECYCLE": "Client lifecycle",
+        "MIGRATION": "Migrations",
+        "DISTRIBUTED_OBJECT": "Structures"
+      },
+      "sourceHints": {
+        "LOG": "com.hazelcast log events (INFO and above) and warnings/errors of the admin service, e.g. serialization errors",
+        "MEMBERSHIP": "MembershipListener: members joining and leaving the cluster",
+        "LIFECYCLE": "LifecycleListener: the admin client starting, connecting, disconnecting",
+        "MIGRATION": "MigrationListener and PartitionLostListener: partition migrations and lost partitions",
+        "DISTRIBUTED_OBJECT": "DistributedObjectListener: maps and other structures created or destroyed"
+      },
+      "buffer_one": "{{buffered}} event of the last {{capacity}}",
+      "buffer_other": "{{buffered}} events of the last {{capacity}}",
+      "dropped_one": "{{dropped}} older event dropped",
+      "dropped_other": "{{dropped}} older events dropped",
+      "empty": "No events yet. Cluster events and Hazelcast log messages appear here as they happen."
+    },
+    "local": {
+      "open": "Open .log / .txt File",
+      "dropZone": "Drop a .log or .txt file here, or click to choose one",
+      "dropNow": "Drop to open the log",
+      "privacy": "The file is read in your browser only and never uploaded. Files larger than 50 MB are cut to their last 50 MB.",
+      "readFailed": "The file could not be read: {{error}}",
+      "close": "Close the file",
+      "matching_one": "{{matching}} matching line, {{shown}} shown",
+      "matching_other": "{{matching}} matching lines, {{shown}} shown",
+      "truncated": "Only the last {{size}} of the file were loaded; line numbers start there"
+    }
   }
 }

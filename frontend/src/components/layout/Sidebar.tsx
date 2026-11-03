@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, FileCode2, HeartPulse, LayoutDashboard, RefreshCw, Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileCode2, HeartPulse, LayoutDashboard, RefreshCw, ScrollText, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { NavLink } from 'react-router-dom';
 import { useDtoSchemas, useHealthReport, useStructures } from '../../api/queries';
@@ -92,6 +92,18 @@ export function Sidebar() {
               {schemas.data.schemas.length}
             </span>
           )}
+        </NavLink>
+        <NavLink
+          to="/logs"
+          className={({ isActive }) =>
+            `mt-0.5 flex items-center gap-2 rounded-md px-2.5 py-2 transition-colors ${
+              isActive ? 'bg-gk-cyan/10 text-gk-cyan' : 'text-gk-text hover:bg-gk-hover'
+            }`
+          }
+          title={t('sidebar.logsHint')}
+        >
+          <ScrollText className="h-4 w-4" aria-hidden />
+          <span className="flex-1">{t('sidebar.logs')}</span>
         </NavLink>
       </nav>
 

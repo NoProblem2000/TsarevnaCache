@@ -27,6 +27,8 @@ never seen.
 - [How custom DTO deserialization works](#how-custom-dto-deserialization-works)
 - [Working with Custom DTOs (Two Approaches)](#working-with-custom-dtos-two-approaches)
 - [Healthcheck & Best Practices Analyzer](#healthcheck--best-practices-analyzer)
+- [Hot Keys Analyzer](#hot-keys-analyzer)
+- [Log Viewer](#log-viewer)
 - [Getting started](#getting-started)
 - [Configuration](#configuration)
 - [REST API](#rest-api)
@@ -71,7 +73,10 @@ TsarevnaCache answers them from a single self-contained jar:
 - Data browser with three modes: all entries (cursor paging), exact key lookup (String, Long,
   Integer, UUID, JSON or a custom class key) and Hazelcast **SQL predicates**
   (e.g. `age > 25 AND active = true`).
-- Table with key, key type, value preview, memory cost, hits and TTL / expiration.
+- Table with key, key type, value preview, memory cost, hits and TTL / last access.
+- **Hot Keys Analyzer**: sort by hits, memory cost, last access, creation time or key; presets
+  *🔥 Most Popular*, *❄️ Cold Keys (0 Hits)* and *📦 Largest in Memory*; a bar shows each entry's
+  hits relative to the most popular one.
 - **Entry Inspector** drawer: JSON editor with syntax highlighting, `EntryView` metadata (cost,
   creation / update / access / store times, version, hits, TTL, max idle), *Save (put)* with an
   optional TTL and *Delete*.
@@ -92,6 +97,14 @@ TsarevnaCache answers them from a single self-contained jar:
 - Health score in the top bar, issue cards with the current values, a recommendation and a link to
   the affected structure; ignore list with reasons (`config/healthcheck-ignores.json`).
 - Prometheus exporter for the score, issue counts and map sizes.
+
+**Log viewer**
+- Server log files (the admin service always writes `logs/hazelcast-inspector.log`, plus any
+  member logs configured) read from the end, filtered by level and text, Live Tail every 3 s and
+  download of the whole file.
+- Live stream of cluster events (members, client lifecycle, migrations, created / destroyed
+  structures) and `com.hazelcast` log events.
+- A local `.log` file opened in the browser with the same highlighting and filters.
 
 **Other structures**
 - Size and the first 50 items of queues, sets, lists, multimaps and replicated maps; remove single
@@ -564,6 +577,75 @@ scrape_configs:
 The *Prometheus Metrics URL* button on the Healthcheck screen shows the URL, this snippet and a
 live preview.
 
+## Hot Keys Analyzer
+
+Which keys are read all the time, which ones nobody reads, and which ones take the most memory?
+Hazelcast keeps `hits`, `cost`, `lastAccessTime` and `creationTime` in the **`EntryView`** of
+an entry, not in its value, so the comparator of a `PagingPredicate` on the members cannot sort by
+them. The data browser therefore ranks a **bounded sample** on the admin side:
+
+1. at most `scanLimit` keys are selected (default 1 000, at most 5 000) — those matching the SQL
+   predicate when one is applied, otherwise in partition order;
+2. their `EntryView` is read in batches of 256 parallel calls (`getEntryView` does not count as an
+   access, so ranking never changes the hits); the values are dropped right away;
+3. the light-weight metrics are sorted and only the requested page is loaded with its values.
+
+The response carries `sampled` and `scannedCount`, and the UI says whether the ranking covers all
+entries or only the first *N* ("Sampled: ranked by Hits over the first 1 000 of 25 000 entries").
+To rank a large map precisely, narrow it down with a predicate (e.g. `__key LIKE 'order-2026%'`).
+
+In the table, **Key**, **Memory Cost**, **Hits** and **TTL / Last Access** are clickable (the cyan
+arrow shows the direction). Above the table:
+
+| Preset | Order |
+|---|---|
+| Default Order | partition order, fast cursor paging (no sampling) |
+| 🔥 Most Popular (Top Hits) | `HITS`, descending |
+| ❄️ Cold Keys (0 Hits) | `HITS`, ascending — entries that are only dead weight |
+| 📦 Largest in Memory (Top Cost) | `COST`, descending |
+
+Each hit count has a bar relative to the most popular entry of the sample; the hottest entries get
+a flame. **Hits are only tracked when the map has `per-entry-stats-enabled: true`** (disabled by
+default since Hazelcast 4.2); otherwise the UI says so and the hits column stays empty.
+
+## Log Viewer
+
+The *Logs* screen has three tabs in the style of a terminal (line numbers, `ERROR` / exceptions /
+`Caused by:` in red, `WARN` in yellow, `INFO` in cyan, muted timestamps and `[thread]` names,
+search matches highlighted), each with a level filter (`ALL | ERROR | WARN | INFO`, a level also
+shows the more severe ones), search, *Wrap Lines*, *Scroll to Bottom* and *Download Log*.
+Stack trace lines belong to the record above them, so filtering by `ERROR` keeps the whole trace.
+
+**External Log Files.** The admin service always writes its own log to
+`./logs/hazelcast-inspector.log` (`logging.file.name`, rotated at 10 MB). Further files or whole
+directories — e.g. the logs of the members on the same host — are added with `admin.logs.paths`:
+
+```yaml
+admin:
+  logs:
+    paths:
+      - ./logs                      # every *.log / *.txt / *.out file of the directory
+      - /var/log/hazelcast/hazelcast.log
+```
+
+Files are **never loaded as a whole**: the end of a file is read backwards with a
+`RandomAccessFile` until the requested number of matching lines (500 by default, at most 5 000) is
+found or 64 MB were read. Filtering happens on the server. *Auto-Refresh (Live Tail 3s)* reloads the
+end every three seconds. *Download Log* streams the whole file. Only the configured files can be
+opened; any other path is rejected with `LOG_FILE_NOT_FOUND`.
+
+**Live Cluster Events.** An in-memory ring buffer (the last 1 000 events) is filled by a
+`MembershipListener` (members joining / leaving), a `LifecycleListener` (the admin client
+connecting, disconnecting, ...), a `MigrationListener` and `PartitionLostListener`, a
+`DistributedObjectListener` (maps and other structures created or destroyed) and a Logback appender
+on `com.hazelcast` (`INFO`+) and on the admin service itself (`WARN`+, e.g. values that cannot be
+deserialized). The view loads the buffer once and then asks every three seconds only for newer
+events; sources can be toggled.
+
+**Open Local .log File.** *Open .log / .txt File* (or drag and drop) opens a log file from your disk
+— for example one downloaded from a member — with the same parsing, highlighting and filters. The file
+is read in the browser and never uploaded; files larger than 50 MB are cut to their last 50 MB.
+
 ## Getting started
 
 ### Requirements
@@ -755,6 +837,24 @@ A warning is logged while the default credentials are in use.
 | `scan-parallelism` | `32` | Partitions scanned in parallel while filling an unfiltered page |
 | `max-preview-items` | `50` | Items shown for queues, sets, lists, multimaps and replicated maps |
 | `max-fetch-items` | `10000` | Queues, sets, multimaps and replicated maps larger than this show their size only (clients can only fetch them as a whole) |
+| `sort-scan-limit` | `1000` | Keys ranked by a sorted request (hot keys analyzer) unless it asks for another number |
+| `max-sort-scan-limit` | `5000` | Largest `scanLimit` a sorted request may ask for |
+| `sort-fetch-batch` | `256` | `getEntryView` calls in flight while a sorted request reads its sample |
+
+### Log viewer — `admin.logs.*`
+
+| Property | Env variable | Default | Description |
+|---|---|---|---|
+| `paths` | `LOG_VIEWER_PATHS` (comma separated) | `logging.file.name` | Log files or directories (their `*.log`, `*.txt`, `*.out` files) the viewer may open |
+| `default-lines` / `max-lines` | | `500` / `5000` | Lines of a tail request |
+| `scan-limit` | | `64MB` | Bytes read backwards per tail request at most |
+| `line-number-limit` | | `64MB` | Larger files are numbered from their end |
+| `max-line-length` | | `4000` | Longer lines are cut |
+| `live-buffer-size` | | `1000` | Events kept by the live stream |
+| `live-hazelcast-level` / `live-application-level` | | `INFO` / `WARN` | Minimum level of `com.hazelcast` and admin service log events in the live stream |
+
+The admin service writes its log to `logging.file.name` (`INSPECTOR_LOG_FILE`, default
+`./logs/hazelcast-inspector.log`).
 
 ### Server
 
@@ -781,6 +881,7 @@ All endpoints below `/api` require the administrator. Errors are returned as
 | `GET` | `/api/maps/{map}/entries?size&cursor` | Unfiltered page; follow `nextCursor` |
 | `GET` | `/api/maps/{map}/entries?searchKey&keyType&keyClassName` | Exact key lookup (or `keyRef`) |
 | `GET` | `/api/maps/{map}/entries?sqlPredicate&page&size` | SQL predicate page |
+| `GET` | `/api/maps/{map}/entries?sortBy&sortDirection&scanLimit&page&size[&sqlPredicate]` | Hot keys analyzer: `sortBy` = `NONE`, `HITS`, `COST`, `LAST_ACCESS`, `CREATION_TIME`, `KEY`; `sortDirection` = `DESC`, `ASC`; returns `sampled`, `scannedCount`, `maxHits` |
 | `GET` | `/api/maps/{map}/entry?key&keyType` or `?keyRef` | Value and `EntryView` metadata |
 | `POST` | `/api/maps/{map}/entry` | Create or update an entry |
 | `DELETE` | `/api/maps/{map}/entry?key&keyType` or `?keyRef` | Delete an entry |
@@ -802,6 +903,11 @@ All endpoints below `/api` require the administrator. Errors are returned as
 | `POST` | `/api/healthcheck/ignore` | Add `{ "issueId", "reason" }` to the ignore list (`CHECK_TYPE:*` = whole rule) |
 | `DELETE` | `/api/healthcheck/ignore/{issueId}` or `?issueId=` | Remove an ignore list entry |
 | `GET` | `/api/healthcheck/prometheus` | Prometheus metrics (`text/plain; version=0.0.4`) |
+| `GET` | `/api/logs/files` | Log files of `admin.logs.paths` |
+| `GET` | `/api/logs/tail?file&lines&level&search` | End of a log file, filtered (`level` = `ALL`, `ERROR`, `WARN`, `INFO`, `DEBUG`) |
+| `GET` | `/api/logs/download?file` | The whole log file |
+| `GET` | `/api/logs/live?after&level&search` | Live stream events newer than `after` (sequence number) |
+| `DELETE` | `/api/logs/live` | Empty the live stream buffer |
 
 Scripts can use HTTP Basic; such requests are exempt from CSRF checks:
 
@@ -877,6 +983,10 @@ archives as a release. Details: [`docs/RELEASING.md`](docs/RELEASING.md).
   **Hazelcast 5.5.0**; re-run the test suite when upgrading.
 - Unfiltered browsing pages forward with a cursor (previous pages are kept in the UI); jumping to an
   arbitrary page number is only available for SQL predicate results.
+- Sorting by hits, cost, access or creation time ranks at most `max-sort-scan-limit` (5 000) keys
+  per request; larger maps are sampled (the UI says so). Hits need `per-entry-stats-enabled`.
+- The log viewer reads files on the host of the admin service; logs of members on other hosts have
+  to be shipped there (or downloaded and opened as a local file).
 - Queues, sets, multimaps and replicated maps can only be fetched as a whole by a client; above
   `max-fetch-items` only their size is shown.
 - Compact values can be edited, but a new Compact value cannot be created from scratch in the UI

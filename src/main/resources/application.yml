@@ -160,8 +160,43 @@ admin:
     # Queues/sets/multimaps/replicated maps larger than this are not fetched
     # (clients can only read them as a whole).
     max-fetch-items: 10000
+    # Hot keys analyzer: sorting by hits / memory cost / last access / creation time / key ranks
+    # this many keys per request (the request may ask for up to max-sort-scan-limit). Their
+    # EntryView is read in batches of sort-fetch-batch calls.
+    sort-scan-limit: 1000
+    max-sort-scan-limit: 5000
+    sort-fetch-batch: 256
+
+  # ---------------------------------------------------------------------------
+  # Log viewer (Logs page): server side log files and the live cluster event stream.
+  # ---------------------------------------------------------------------------
+  logs:
+    # Files or directories (their *.log, *.txt, *.out files) that can be viewed and
+    # downloaded, comma separated in LOG_VIEWER_PATHS. No other file is reachable.
+    # Example: ./logs/hazelcast-inspector.log,/var/log/hazelcast
+    paths: ${LOG_VIEWER_PATHS:${logging.file.name}}
+    # Lines of a tail request (the UI may ask for up to max-lines).
+    default-lines: 500
+    max-lines: 5000
+    # Bytes read backwards per request at most (filters that rarely match stop here).
+    scan-limit: 64MB
+    # Files up to this size get absolute line numbers.
+    line-number-limit: 64MB
+    max-line-length: 4000
+    # In-memory live stream: membership, lifecycle, migration and distributed object
+    # events plus com.hazelcast log events and the admin service's own warnings.
+    live-buffer-size: 1000
+    live-hazelcast-level: INFO
+    live-application-level: WARN
 
 logging:
+  # The admin service always writes its log to this file (rotated at 10 MB, 7 days kept).
+  file:
+    name: ${INSPECTOR_LOG_FILE:./logs/hazelcast-inspector.log}
+  logback:
+    rollingpolicy:
+      max-file-size: 10MB
+      max-history: 7
   level:
     root: INFO
     com.hazelcast: INFO

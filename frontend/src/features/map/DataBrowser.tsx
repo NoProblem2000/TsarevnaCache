@@ -5,15 +5,17 @@ import { useTranslation } from 'react-i18next';
 import { ApiError } from '../../api/client';
 import { endpoints } from '../../api/endpoints';
 import { queryKeys } from '../../api/queries';
-import type { EntryDTO, EntryQuery } from '../../api/types';
+import type { EntryDTO, EntryQuery, EntrySortBy } from '../../api/types';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { ErrorMessage } from '../../components/ui/ErrorMessage';
 import { CenteredSpinner } from '../../components/ui/Spinner';
 import { useToast } from '../../components/ui/Toast';
 import { EntryTable } from './EntryTable';
 import { MissingSchemasBanner } from './MissingSchemasBanner';
+import { DEFAULT_SCAN_LIMIT, DEFAULT_SORT, isSorted, nextSort, type EntrySort } from './entrySort';
 import { Pagination } from './Pagination';
 import { SearchBar, type AppliedSearch } from './SearchBar';
+import { SortToolbar } from './SortToolbar';
 import { useInvalidateMapData } from './useInvalidateMapData';
 
 interface DataBrowserProps {
@@ -26,7 +28,9 @@ interface DataBrowserProps {
 
 /**
  * Data browser of one map. Unfiltered pages are cursor based: the cursors of visited pages are
- * kept so "previous" works; predicate pages are addressed by index.
+ * kept so "previous" works; predicate pages are addressed by index. A sort (hot keys analyzer)
+ * ranks a sample of the entries (filtered by the predicate, if any) on the server; its pages are
+ * addressed by index as well.
  */
 export function DataBrowser({ mapName, toolbarActions, onOpenEntry }: DataBrowserProps) {
   const { t } = useTranslation();
@@ -38,10 +42,21 @@ export function DataBrowser({ mapName, toolbarActions, onOpenEntry }: DataBrowse
   const [cursors, setCursors] = useState<(string | undefined)[]>([undefined]);
   const [toDelete, setToDelete] = useState<EntryDTO | null>(null);
   const [evictOpen, setEvictOpen] = useState(false);
+  const [sort, setSort] = useState<EntrySort>(DEFAULT_SORT);
+  const [scanLimit, setScanLimit] = useState(DEFAULT_SCAN_LIMIT);
+  const sorted = isSorted(sort) && search.mode !== 'key';
 
   const query: EntryQuery = { size: pageSize };
   if (search.mode === 'key') {
     Object.assign(query, { searchKey: search.key, keyType: search.keyType, keyClassName: search.keyClassName });
+  } else if (sorted) {
+    Object.assign(query, {
+      sortBy: sort.sortBy,
+      sortDirection: sort.direction,
+      scanLimit,
+      page,
+      sqlPredicate: search.mode === 'predicate' ? search.predicate : undefined,
+    });
   } else if (search.mode === 'predicate') {
     Object.assign(query, { sqlPredicate: search.predicate, page });
   } else {
@@ -64,6 +79,15 @@ export function DataBrowser({ mapName, toolbarActions, onOpenEntry }: DataBrowse
   };
   const changePageSize = (size: number) => {
     setPageSize(size);
+    resetPaging();
+  };
+  const changeSort = (next: EntrySort) => {
+    setSort(next);
+    resetPaging();
+  };
+  const sortByColumn = (column: EntrySortBy) => changeSort(nextSort(sorted ? sort : DEFAULT_SORT, column));
+  const changeScanLimit = (limit: number) => {
+    setScanLimit(limit);
     resetPaging();
   };
   const next = () => {
@@ -116,6 +140,15 @@ export function DataBrowser({ mapName, toolbarActions, onOpenEntry }: DataBrowse
         </div>
       </div>
 
+      <SortToolbar
+        sort={sort}
+        onSortChange={changeSort}
+        scanLimit={scanLimit}
+        onScanLimitChange={changeScanLimit}
+        page={entries.isError ? undefined : data}
+        disabled={search.mode === 'key'}
+      />
+
       {data && !entries.isError && <MissingSchemasBanner entries={data.entries} />}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -132,7 +165,14 @@ export function DataBrowser({ mapName, toolbarActions, onOpenEntry }: DataBrowse
           </div>
         )}
         {data && !entries.isError && data.entries.length > 0 && (
-          <EntryTable entries={data.entries} onDelete={setToDelete} onOpen={onOpenEntry} />
+          <EntryTable
+            entries={data.entries}
+            onDelete={setToDelete}
+            onOpen={onOpenEntry}
+            sort={sorted ? sort : DEFAULT_SORT}
+            onSort={search.mode === 'key' ? undefined : sortByColumn}
+            maxHits={data.mode === 'SORTED' ? data.maxHits : undefined}
+          />
         )}
       </div>
 

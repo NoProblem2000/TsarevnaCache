@@ -53,6 +53,11 @@ public enum ErrorCode {
     /** The requested structure type is not supported by this endpoint. */
     UNSUPPORTED_STRUCTURE_TYPE(HttpStatus.BAD_REQUEST),
 
+    /** The log file is not one of {@code admin.logs.paths} or does not exist. */
+    LOG_FILE_NOT_FOUND(HttpStatus.NOT_FOUND),
+    /** The log file exists but cannot be read by the admin service. */
+    LOG_FILE_UNREADABLE(HttpStatus.UNPROCESSABLE_ENTITY),
+
     MAP_NOT_FOUND(HttpStatus.NOT_FOUND),
     STRUCTURE_NOT_FOUND(HttpStatus.NOT_FOUND),
     ENTRY_NOT_FOUND(HttpStatus.NOT_FOUND),

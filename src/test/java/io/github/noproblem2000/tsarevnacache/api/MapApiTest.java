@@ -10,7 +10,9 @@ import com.hazelcast.core.HazelcastJsonValue;
 import com.hazelcast.map.IMap;
 import io.github.noproblem2000.tsarevnacache.inspector.DataRefs;
 import io.github.noproblem2000.tsarevnacache.support.AbstractApiTest;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -127,6 +129,104 @@ class MapApiTest extends AbstractApiTest {
         Response invalid = httpGet("/api/maps/people/entries?sqlPredicate={predicate}", "age >>> 3");
         assertThat(invalid.status()).isEqualTo(400);
         assertThat(invalid.code()).isEqualTo("INVALID_PREDICATE");
+    }
+
+    @Test
+    void hotKeysAnalyzerRanksASampleByEntryViewMetrics() throws Exception {
+        IMap<Integer, String> member = cluster().member().getMap("hot-orders");
+        for (int i = 0; i < 12; i++) {
+            member.put(i, "v" + "x".repeat(i * 20));
+        }
+        // unique hit counts in an order that differs from the keys: key 7 has 11 hits, key 0 none
+        for (int i = 0; i < 12; i++) {
+            for (int hit = 0; hit < (i * 5) % 12; hit++) {
+                member.get(i);
+            }
+        }
+
+        JsonNode top = httpGet("/api/maps/hot-orders/entries?sortBy=HITS&sortDirection=DESC&size=5").body();
+        assertThat(top.path("mode").asText()).isEqualTo("SORTED");
+        assertThat(top.path("sortBy").asText()).isEqualTo("HITS");
+        assertThat(top.path("sortDirection").asText()).isEqualTo("DESC");
+        assertThat(keys(top)).containsExactly("7", "2", "9", "4", "11");
+        assertThat(hits(top)).containsExactly(11L, 10L, 9L, 8L, 7L);
+        assertThat(top.path("maxHits").asLong()).isEqualTo(11);
+        assertThat(top.path("hitsAvailable").asBoolean()).isTrue();
+        assertThat(top.path("sampled").asBoolean()).isFalse();
+        assertThat(top.path("scannedCount").asInt()).isEqualTo(12);
+        assertThat(top.path("scanLimit").asInt()).isEqualTo(1000);
+        assertThat(top.path("total").asLong()).isEqualTo(12);
+        assertThat(top.path("hasNext").asBoolean()).isTrue();
+        assertThat(top.path("entries").get(0).path("value").has("value")).isFalse();
+
+        // reading the ranking (getEntryView) is not an access: the hits stay as they are
+        JsonNode last = httpGet("/api/maps/hot-orders/entries?sortBy=HITS&sortDirection=DESC&size=5&page=2").body();
+        assertThat(hits(last)).containsExactly(1L, 0L);
+        assertThat(last.path("hasNext").asBoolean()).isFalse();
+        assertThat(hits(httpGet("/api/maps/hot-orders/entries?sortBy=HITS&size=1").body())).containsExactly(11L);
+
+        JsonNode cold = httpGet("/api/maps/hot-orders/entries?sortBy=HITS&sortDirection=ASC&size=3").body();
+        assertThat(keys(cold)).containsExactly("0", "5", "10");
+
+        JsonNode largest = httpGet("/api/maps/hot-orders/entries?sortBy=COST&sortDirection=DESC&size=12").body();
+        assertThat(keys(largest).get(0)).isEqualTo("11");
+        assertThat(metadata(largest, "cost")).isSortedAccordingTo((a, b) -> Long.compare(b, a));
+
+        JsonNode byKey = httpGet("/api/maps/hot-orders/entries?sortBy=KEY&sortDirection=ASC&size=4").body();
+        assertThat(keys(byKey)).containsExactly("0", "1", "2", "3");
+        assertThat(keys(httpGet("/api/maps/hot-orders/entries?sortBy=KEY&sortDirection=DESC&size=2").body()))
+                .containsExactly("11", "10");
+
+        JsonNode recent = httpGet("/api/maps/hot-orders/entries?sortBy=LAST_ACCESS&size=12").body();
+        assertThat(metadata(recent, "lastAccessTime")).isSortedAccordingTo((a, b) -> Long.compare(b, a));
+        JsonNode oldest = httpGet("/api/maps/hot-orders/entries?sortBy=CREATION_TIME&sortDirection=ASC&size=12")
+                .body();
+        assertThat(metadata(oldest, "creationTime")).isSortedAccordingTo(Long::compare);
+
+        JsonNode filtered = httpGet("/api/maps/hot-orders/entries?sortBy=HITS&size=10&sqlPredicate={predicate}",
+                "__key > 5").body();
+        assertThat(keys(filtered)).containsExactly("7", "9", "11", "6", "8", "10");
+        assertThat(filtered.has("total")).isFalse();
+        assertThat(filtered.path("scannedCount").asInt()).isEqualTo(6);
+
+        JsonNode sample = httpGet("/api/maps/hot-orders/entries?sortBy=HITS&scanLimit=5&size=10").body();
+        assertThat(sample.path("sampled").asBoolean()).isTrue();
+        assertThat(sample.path("scannedCount").asInt()).isEqualTo(5);
+        assertThat(sample.path("entries").size()).isEqualTo(5);
+        assertThat(httpGet("/api/maps/hot-orders/entries?sortBy=HITS&scanLimit=99999").body().path("scanLimit")
+                .asInt()).isEqualTo(5000);
+
+        assertThat(httpGet("/api/maps/hot-orders/entries?sortBy=POPULARITY").status()).isEqualTo(400);
+    }
+
+    @Test
+    void sortingByHitsReportsMapsWithoutPerEntryStatistics() throws Exception {
+        IMap<String, String> map = hazelcastClient.getMap("plain-sort-map");
+        map.put("a", "1");
+        map.put("b", "2");
+        map.get("a");
+
+        JsonNode page = httpGet("/api/maps/plain-sort-map/entries?sortBy=HITS").body();
+        assertThat(page.path("mode").asText()).isEqualTo("SORTED");
+        assertThat(page.path("entries").size()).isEqualTo(2);
+        assertThat(page.path("hitsAvailable").asBoolean()).isFalse();
+        assertThat(page.has("maxHits")).isFalse();
+    }
+
+    private static List<String> keys(JsonNode page) {
+        List<String> keys = new ArrayList<>();
+        page.path("entries").forEach(entry -> keys.add(entry.path("key").path("preview").asText()));
+        return keys;
+    }
+
+    private static List<Long> hits(JsonNode page) {
+        return metadata(page, "hits");
+    }
+
+    private static List<Long> metadata(JsonNode page, String field) {
+        List<Long> values = new ArrayList<>();
+        page.path("entries").forEach(entry -> values.add(entry.path("metadata").path(field).asLong()));
+        return values;
     }
 
     @Test

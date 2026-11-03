@@ -6,8 +6,10 @@ import io.github.noproblem2000.tsarevnacache.api.dto.EntryPageDTO;
 import io.github.noproblem2000.tsarevnacache.api.dto.MapStatsDTO;
 import io.github.noproblem2000.tsarevnacache.api.dto.PutEntryRequest;
 import io.github.noproblem2000.tsarevnacache.maps.EntryQuery;
+import io.github.noproblem2000.tsarevnacache.maps.EntrySortBy;
 import io.github.noproblem2000.tsarevnacache.maps.KeySpec;
 import io.github.noproblem2000.tsarevnacache.maps.MapInspectorService;
+import io.github.noproblem2000.tsarevnacache.maps.SortDirection;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -46,6 +48,11 @@ public class MapController {
     /**
      * One page of entries: exact key lookup ({@code searchKey}/{@code keyRef}), SQL predicate
      * paging ({@code sqlPredicate} + {@code page}) or cursor based scan ({@code cursor}).
+     *
+     * <p>With {@code sortBy} other than {@code NONE} at most {@code scanLimit} keys (optionally
+     * filtered by {@code sqlPredicate}) are ranked by an {@code EntryView} metric and {@code page}
+     * addresses that ranking; the response reports {@code sampled} and {@code scannedCount}.
+     * {@code scanLimit} is capped at {@code admin.explorer.max-sort-scan-limit} (5000).
      */
     @GetMapping("/entries")
     public EntryPageDTO entries(@PathVariable String mapName,
@@ -56,9 +63,12 @@ public class MapController {
                                 @RequestParam(required = false) DataType keyType,
                                 @RequestParam(required = false) String keyClassName,
                                 @RequestParam(required = false) String keyRef,
-                                @RequestParam(required = false) String sqlPredicate) {
-        return mapInspector.entries(mapName,
-                new EntryQuery(page, size, cursor, searchKey, keyType, keyClassName, keyRef, sqlPredicate));
+                                @RequestParam(required = false) String sqlPredicate,
+                                @RequestParam(defaultValue = "NONE") EntrySortBy sortBy,
+                                @RequestParam(defaultValue = "DESC") SortDirection sortDirection,
+                                @RequestParam(required = false) @Min(1) Integer scanLimit) {
+        return mapInspector.entries(mapName, new EntryQuery(page, size, cursor, searchKey, keyType, keyClassName,
+                keyRef, sqlPredicate, sortBy, sortDirection, scanLimit));
     }
 
     /** Value and {@code EntryView} metadata of one entry. */

@@ -47,4 +47,18 @@ public class ExplorerProperties {
      */
     @Min(1)
     private int maxFetchItems = 10_000;
+
+    /** Keys ranked by a sorted IMap request (hits, cost, last access, ...) unless it asks for another limit. */
+    @Min(1)
+    private int sortScanLimit = 1000;
+
+    /** Upper bound of the scan limit a sorted IMap request may ask for. */
+    @Min(1)
+    @Max(100_000)
+    private int maxSortScanLimit = 5000;
+
+    /** {@code getEntryView} calls in flight while a sorted request reads the metrics of its sample. */
+    @Min(1)
+    @Max(1000)
+    private int sortFetchBatch = 256;
 }

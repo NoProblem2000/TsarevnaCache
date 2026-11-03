@@ -5,6 +5,7 @@ import { CenteredSpinner } from './components/ui/Spinner';
 import { DashboardPage } from './pages/DashboardPage';
 import { HealthcheckPage } from './pages/HealthcheckPage';
 import { LoginPage } from './pages/LoginPage';
+import { LogsPage } from './pages/LogsPage';
 import { MapPage } from './pages/MapPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { SchemasPage } from './pages/SchemasPage';
@@ -29,6 +30,7 @@ export function App() {
           <Route path="structures/:type/:name" element={<StructurePage />} />
           <Route path="schemas" element={<SchemasPage />} />
           <Route path="healthcheck" element={<HealthcheckPage />} />
+          <Route path="logs" element={<LogsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>

@@ -23,6 +23,9 @@ public abstract class AbstractIntegrationTest {
     /** Healthcheck ignore list of the test application. */
     protected static final Path HEALTHCHECK_IGNORES_FILE = DTO_SCHEMAS_FILE.resolveSibling("healthcheck-ignores.json");
 
+    /** Directory of the log viewer of the test application ({@code admin.logs.paths}). */
+    protected static final Path LOGS_DIRECTORY = DTO_SCHEMAS_FILE.resolveSibling("logs");
+
     private static Path tempDirectory() {
         try {
             return Files.createTempDirectory("tsarevna-schemas");
@@ -42,6 +45,7 @@ public abstract class AbstractIntegrationTest {
         registry.add("admin.security.password", () -> ADMIN_PASSWORD);
         registry.add("admin.dto-schemas.file", () -> DTO_SCHEMAS_FILE.toString());
         registry.add("admin.healthcheck.ignores-file", () -> HEALTHCHECK_IGNORES_FILE.toString());
+        registry.add("admin.logs.paths", () -> LOGS_DIRECTORY.toString());
         // runs are triggered by the tests themselves
         registry.add("admin.healthcheck.enabled", () -> "false");
     }

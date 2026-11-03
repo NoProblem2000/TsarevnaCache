@@ -21,6 +21,8 @@ import io.github.noproblem2000.tsarevnacache.config.properties.HazelcastClientPr
 import io.github.noproblem2000.tsarevnacache.config.properties.HazelcastClientProperties.Serialization;
 import io.github.noproblem2000.tsarevnacache.dto.DtoSchemaRegistryService;
 import io.github.noproblem2000.tsarevnacache.dto.DynamicDataSerializableFactory;
+import io.github.noproblem2000.tsarevnacache.logs.ClusterEventRecorder;
+import io.github.noproblem2000.tsarevnacache.logs.LiveEventBuffer;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
@@ -29,6 +31,7 @@ import java.util.TreeSet;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.util.StringUtils;
 
 /**
@@ -60,7 +63,8 @@ public class HazelcastClientConfig {
     @Bean
     public ClientConfig hazelcastClientConfiguration(HazelcastClientProperties properties,
                                                      DtoClassLoader dtoClassLoader,
-                                                     DtoSchemaRegistryService dtoSchemaRegistry) {
+                                                     DtoSchemaRegistryService dtoSchemaRegistry,
+                                                     LiveEventBuffer liveEvents) {
         ClientConfig config = new ClientConfig();
         config.setClusterName(properties.getClusterName());
         config.setClassLoader(dtoClassLoader);
@@ -83,6 +87,8 @@ public class HazelcastClientConfig {
                 dtoSchemaRegistry);
 
         config.addListenerConfig(new ListenerConfig(new ConnectionStateLogger(properties.getClusterName())));
+        config.addListenerConfig(new ListenerConfig(
+                new ClusterEventRecorder.LifecycleRecorder(liveEvents, properties.getClusterName())));
         return config;
     }
 
@@ -91,6 +97,7 @@ public class HazelcastClientConfig {
      * connection is established in the background.
      */
     @Bean(destroyMethod = "shutdown")
+    @DependsOn("liveLogCapture") // the live stream sees the client's log events from the very start
     public HazelcastInstance hazelcastClient(ClientConfig hazelcastClientConfiguration) {
         log.info("Starting Hazelcast client for cluster '{}' (members: {})",
                 hazelcastClientConfiguration.getClusterName(),
